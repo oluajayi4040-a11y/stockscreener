@@ -7,7 +7,7 @@ export default function Alerts() {
 
   useEffect(() => {
     // Fetch existing alerts on page load
-    fetch("http://localhost:8080/alerts")
+    fetch("http://localhost:8080/api/alerts")  // ✅ Changed to /api/alerts
       .then((res) => res.json())
       .then((data) => setAlerts(data));
 

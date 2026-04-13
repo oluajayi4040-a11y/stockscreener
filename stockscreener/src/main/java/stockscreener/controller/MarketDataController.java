@@ -1,29 +1,49 @@
 package stockscreener.controller;
 
-import stockscreener.service.AlpacaService;
-import stockscreener.dto.QuoteDTO;
 import org.springframework.web.bind.annotation.*;
+import stockscreener.dto.QuoteDTO;
+import stockscreener.model.PremarketLevels;
+import stockscreener.service.PolygonService;
+import stockscreener.service.FinnhubPriceService;
 
 @RestController
 @RequestMapping("/market")
 @CrossOrigin(origins = "*")
 public class MarketDataController {
 
-    private final AlpacaService alpacaService;
+    private final PolygonService polygonService;
+    private final FinnhubPriceService finnhubPriceService;
 
-    public MarketDataController(AlpacaService alpacaService) {
-        this.alpacaService = alpacaService;
+    public MarketDataController(
+            PolygonService polygonService,
+            FinnhubPriceService finnhubPriceService
+    ) {
+        this.polygonService = polygonService;
+        this.finnhubPriceService = finnhubPriceService;
     }
 
-    // ORIGINAL ENDPOINT (unchanged)
-    @GetMapping("/quote/raw/{symbol}")
-    public String getRawQuote(@PathVariable String symbol) {
-        return alpacaService.getLatestQuote(symbol.toUpperCase());
+    @GetMapping("/premarket/{symbol}")
+    public PremarketLevels getPremarketLevels(@PathVariable String symbol) {
+        return polygonService.getPremarketLevels(symbol.toUpperCase());
     }
 
-    // NEW CLEAN ENDPOINT (returns QuoteDTO)
+    @GetMapping("/price/{symbol}")
+    public double getLatestPrice(@PathVariable String symbol) {
+        return finnhubPriceService.getLatestPrice(symbol.toUpperCase());
+    }
+
     @GetMapping("/quote/{symbol}")
     public QuoteDTO getCleanQuote(@PathVariable String symbol) {
-        return alpacaService.getCleanQuote(symbol.toUpperCase());
+
+        String sym = symbol.toUpperCase();
+        PremarketLevels levels = polygonService.getPremarketLevels(sym);
+        double price = finnhubPriceService.getLatestPrice(sym);
+
+        return new QuoteDTO(
+                sym,
+                price,
+                levels != null ? levels.getHigh() : 0,
+                levels != null ? levels.getLow() : 0
+        );
     }
 }

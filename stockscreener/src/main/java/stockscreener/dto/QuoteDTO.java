@@ -4,12 +4,14 @@ public class QuoteDTO {
 
     private String symbol;
     private double price;
-    private double changePercent;
+    private double premarketHigh;
+    private double premarketLow;
 
-    public QuoteDTO(String symbol, double price, double changePercent) {
+    public QuoteDTO(String symbol, double price, double premarketHigh, double premarketLow) {
         this.symbol = symbol;
         this.price = price;
-        this.changePercent = changePercent;
+        this.premarketHigh = premarketHigh;
+        this.premarketLow = premarketLow;
     }
 
     public String getSymbol() {
@@ -20,8 +22,12 @@ public class QuoteDTO {
         return price;
     }
 
-    public double getChangePercent() {
-        return changePercent;
+    public double getPremarketHigh() {
+        return premarketHigh;
+    }
+
+    public double getPremarketLow() {
+        return premarketLow;
     }
 
     public void setSymbol(String symbol) {
@@ -32,7 +38,11 @@ public class QuoteDTO {
         this.price = price;
     }
 
-    public void setChangePercent(double changePercent) {
-        this.changePercent = changePercent;
+    public void setPremarketHigh(double premarketHigh) {
+        this.premarketHigh = premarketHigh;
+    }
+
+    public void setPremarketLow(double premarketLow) {
+        this.premarketLow = premarketLow;
     }
 }

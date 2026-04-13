@@ -11,7 +11,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @RestController
-@RequestMapping("/alerts")
+@RequestMapping("/api/alerts")  // ✅ Changed from "/alerts" to "/api/alerts"
 @CrossOrigin(origins = "*")
 public class AlertsController {
 
@@ -21,7 +21,7 @@ public class AlertsController {
         this.alertRepo = alertRepo;
     }
 
-    // GET /alerts → all alerts sorted newest first
+    // GET /api/alerts → all alerts sorted newest first
     @GetMapping
     public List<PremarketAlert> getAllAlerts() {
         return alertRepo.findAll().stream()
@@ -29,7 +29,7 @@ public class AlertsController {
                 .toList();
     }
 
-    // GET /alerts/today → only today's alerts sorted newest first
+    // GET /api/alerts/today → only today's alerts sorted newest first
     @GetMapping("/today")
     public List<PremarketAlert> getTodayAlerts() {
         LocalDate today = LocalDate.now();

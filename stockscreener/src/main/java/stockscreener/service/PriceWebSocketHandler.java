@@ -16,27 +16,27 @@ public class PriceWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
         sessions.add(session);
-        System.out.println("🔌 Frontend connected: " + session.getId());
+        System.out.println("🔌 Alerts WebSocket connected: " + session.getId());
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         sessions.remove(session);
-        System.out.println("❌ Frontend disconnected: " + session.getId());
+        System.out.println("❌ Alerts WebSocket disconnected: " + session.getId());
     }
 
-    // ⭐ Broadcast a single-symbol price update to all connected clients
-    public void broadcast(String symbol, double price) {
+    // ⭐ Broadcast a breakout alert to all connected clients
+    public void broadcastAlert(String symbol, String type) {
         String json = String.format(
-                "{\"symbol\":\"%s\",\"price\":%.4f}",
-                symbol, price
+                "{\"symbol\":\"%s\",\"type\":\"%s\"}",
+                symbol, type
         );
 
         for (WebSocketSession session : sessions) {
             try {
                 session.sendMessage(new TextMessage(json));
             } catch (Exception e) {
-                System.out.println("⚠️ Failed to send message: " + e.getMessage());
+                System.out.println("⚠️ Failed to send alert: " + e.getMessage());
             }
         }
     }

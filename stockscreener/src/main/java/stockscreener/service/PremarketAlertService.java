@@ -3,6 +3,7 @@ package stockscreener.service;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import stockscreener.model.PremarketAlert;
+import stockscreener.model.PremarketLevels;
 import stockscreener.repository.PremarketAlertRepository;
 import stockscreener.repository.WatchlistRepository;
 
@@ -14,33 +15,42 @@ public class PremarketAlertService {
 
     private final WatchlistRepository watchlistRepo;
     private final PremarketAlertRepository alertRepo;
-    private final AlpacaService alpacaService;
+    private final PolygonService polygonService;
+    private final FinnhubPriceService finnhubPriceService;
     private final AlertBroadcastService broadcastService;
-    private final EmailService emailService;   // ⭐ NEW
+    private final EmailService emailService;
 
     public PremarketAlertService(
             WatchlistRepository watchlistRepo,
             PremarketAlertRepository alertRepo,
-            AlpacaService alpacaService,
+            PolygonService polygonService,
+            FinnhubPriceService finnhubPriceService,
             AlertBroadcastService broadcastService,
-            EmailService emailService   // ⭐ NEW
+            EmailService emailService
     ) {
         this.watchlistRepo = watchlistRepo;
         this.alertRepo = alertRepo;
-        this.alpacaService = alpacaService;
+        this.polygonService = polygonService;
+        this.finnhubPriceService = finnhubPriceService;
         this.broadcastService = broadcastService;
-        this.emailService = emailService;   // ⭐ NEW
+        this.emailService = emailService;
     }
 
     // Runs every 5 seconds
     @Scheduled(fixedRate = 5000)
     public void checkPremarketBreakouts() {
 
-        // ⭐ Run only between 8:29 AM and 8:35 AM CST
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("America/Chicago"));
-        LocalTime time = now.toLocalTime();
 
-        if (time.isBefore(LocalTime.of(8, 29)) || time.isAfter(LocalTime.of(8, 35))) {
+        // Only Monday–Friday
+        DayOfWeek day = now.getDayOfWeek();
+        if (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY) {
+            return;
+        }
+
+        // Only between 8:30 AM and 8:40 AM CST
+        LocalTime time = now.toLocalTime();
+        if (time.isBefore(LocalTime.of(8, 30)) || time.isAfter(LocalTime.of(8, 40))) {
             return;
         }
 
@@ -49,16 +59,17 @@ public class PremarketAlertService {
 
         for (String symbol : symbols) {
 
-            // 1. Get premarket high/low
-            var levels = alpacaService.getPremarketLevels(symbol);
+            // 1. Get premarket high/low from Polygon
+            PremarketLevels levels = polygonService.getPremarketLevels(symbol);
             if (levels == null) continue;
 
-            // ⭐ UPDATED — use getters
             double preHigh = levels.getHigh();
             double preLow  = levels.getLow();
 
-            // 2. Get latest price
-            double price = alpacaService.getLatestPrice(symbol);
+            if (preHigh == 0 || preLow == 0) continue;
+
+            // 2. Get latest real-time price from Finnhub
+            double price = finnhubPriceService.getLatestPrice(symbol);
             if (price <= 0) continue;
 
             // 3. Check breakout
@@ -74,8 +85,6 @@ public class PremarketAlertService {
 
                 PremarketAlert saved = alertRepo.save(alert);
                 broadcastService.sendAlert(saved);
-
-                // ⭐ Send Email Alert
                 emailService.sendAlertEmail("YOUR_EMAIL@gmail.com", saved);
             }
 
@@ -91,8 +100,6 @@ public class PremarketAlertService {
 
                 PremarketAlert saved = alertRepo.save(alert);
                 broadcastService.sendAlert(saved);
-
-                // ⭐ Send Email Alert
                 emailService.sendAlertEmail("YOUR_EMAIL@gmail.com", saved);
             }
         }

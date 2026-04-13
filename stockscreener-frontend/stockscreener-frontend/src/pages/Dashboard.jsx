@@ -1,14 +1,16 @@
 import { useEffect, useState, useRef } from "react";
+import SockJS from "sockjs-client";
+import { Client } from "@stomp/stompjs";
 import "./Dashboard.css";
 
 function Dashboard() {
   const [watchlist, setWatchlist] = useState([]);
   const [newSymbol, setNewSymbol] = useState("");
   const [expanded, setExpanded] = useState({});
-  const [breakouts, setBreakouts] = useState([]); // ⭐ NEW STATE
+  const [breakouts, setBreakouts] = useState([]);
 
   const previousPrices = useRef({});
-  const wsRef = useRef(null);
+  const stompClientRef = useRef(null);
 
   // Compute Daily % and Intraday %
   const computeMetrics = (item) => {
@@ -65,16 +67,19 @@ function Dashboard() {
     }
   };
 
-  // WebSocket real-time price updates
+  // ⭐ STOMP WebSocket for real-time price updates
   useEffect(() => {
     loadWatchlist();
 
-    const ws = new WebSocket("ws://localhost:8080/prices");
-    wsRef.current = ws;
+    const socket = new SockJS("http://localhost:8080/ws");
+    const stompClient = new Client({
+      webSocketFactory: () => socket,
+      reconnectDelay: 5000,
+    });
 
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
+    stompClient.onConnect = () => {
+      stompClient.subscribe("/topic/prices", (message) => {
+        const msg = JSON.parse(message.body);
         const { symbol, price } = msg;
 
         setWatchlist((current) =>
@@ -93,28 +98,22 @@ function Dashboard() {
               previousPrices.current[symbol] = price;
             }
 
-            const updatedItem = {
-              ...item,
-              price,
-              flashClass,
-              premarketHigh: item.premarketHigh,
-              premarketLow: item.premarketLow,
-            };
-
+            const updatedItem = { ...item, price, flashClass };
             const { dailyChange, intradayChange } = computeMetrics(updatedItem);
 
             return { ...updatedItem, dailyChange, intradayChange };
           })
         );
-      } catch (e) {
-        console.error("WebSocket parse error:", e);
-      }
+      });
     };
 
-    return () => wsRef.current && wsRef.current.close();
+    stompClient.activate();
+    stompClientRef.current = stompClient;
+
+    return () => stompClient.deactivate();
   }, []);
 
-  // ⭐ NEW — WebSocket listener for breakout alerts
+  // ⭐ WebSocket listener for breakout alerts
   useEffect(() => {
     const ws = new WebSocket("ws://localhost:8080/alerts");
 
@@ -191,7 +190,7 @@ function Dashboard() {
         </div>
       </section>
 
-      {/* ⭐ NEW — PREMARKET BREAKOUT LIST */}
+      {/* BREAKOUT LIST */}
       <section className="breakout-section">
         <h3>Premarket Breakouts</h3>
 

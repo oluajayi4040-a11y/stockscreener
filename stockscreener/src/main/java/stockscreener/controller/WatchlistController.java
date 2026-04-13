@@ -11,19 +11,19 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/watchlist")
-@CrossOrigin
+@CrossOrigin(origins = "*")
 public class WatchlistController {
 
     @Autowired
     private WatchlistService service;
 
-    // ⭐ Return enriched watchlist (previousClose, marketOpen, price)
+    // ⭐ Return watchlist with real-time price + premarket levels
     @GetMapping
     public List<WatchlistItemDTO> getWatchlist() {
         return service.getWatchlistWithPrices();
     }
 
-    // ⭐ Add symbol
+    // ⭐ Add symbol (POST body: { "symbol": "AAPL" })
     @PostMapping
     public Watchlist add(@RequestBody Map<String, String> body) {
         return service.addSymbol(body.get("symbol"));
