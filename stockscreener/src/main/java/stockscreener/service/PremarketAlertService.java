@@ -15,7 +15,7 @@ public class PremarketAlertService {
 
     private final WatchlistRepository watchlistRepo;
     private final PremarketAlertRepository alertRepo;
-    private final PolygonService polygonService;
+    private final AlpacaDataService alpacaDataService;  // ⭐ Changed from PolygonService to AlpacaDataService
     private final FinnhubPriceService finnhubPriceService;
     private final AlertBroadcastService broadcastService;
     private final EmailService emailService;
@@ -23,14 +23,14 @@ public class PremarketAlertService {
     public PremarketAlertService(
             WatchlistRepository watchlistRepo,
             PremarketAlertRepository alertRepo,
-            PolygonService polygonService,
+            AlpacaDataService alpacaDataService,  // ⭐ Changed from PolygonService
             FinnhubPriceService finnhubPriceService,
             AlertBroadcastService broadcastService,
             EmailService emailService
     ) {
         this.watchlistRepo = watchlistRepo;
         this.alertRepo = alertRepo;
-        this.polygonService = polygonService;
+        this.alpacaDataService = alpacaDataService;  // ⭐ Changed
         this.finnhubPriceService = finnhubPriceService;
         this.broadcastService = broadcastService;
         this.emailService = emailService;
@@ -59,8 +59,8 @@ public class PremarketAlertService {
 
         for (String symbol : symbols) {
 
-            // 1. Get premarket high/low from Polygon
-            PremarketLevels levels = polygonService.getPremarketLevels(symbol);
+            // 1. Get premarket high/low from Alpaca
+            PremarketLevels levels = alpacaDataService.getPremarketLevels(symbol);
             if (levels == null) continue;
 
             double preHigh = levels.getHigh();
@@ -86,6 +86,7 @@ public class PremarketAlertService {
                 PremarketAlert saved = alertRepo.save(alert);
                 broadcastService.sendAlert(saved);
                 emailService.sendAlertEmail("YOUR_EMAIL@gmail.com", saved);
+                System.out.println("📧 Email alert sent for " + symbol + " HIGH breakout at $" + price);
             }
 
             if (price < preLow) {
@@ -101,6 +102,7 @@ public class PremarketAlertService {
                 PremarketAlert saved = alertRepo.save(alert);
                 broadcastService.sendAlert(saved);
                 emailService.sendAlertEmail("YOUR_EMAIL@gmail.com", saved);
+                System.out.println("📧 Email alert sent for " + symbol + " LOW breakout at $" + price);
             }
         }
     }

@@ -3,14 +3,19 @@ package stockscreener.service;
 import jakarta.annotation.PostConstruct;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.socket.*;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
+import stockscreener.model.PremarketLevels;
 
 import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class FinnhubWebSocketClient {
@@ -21,16 +26,29 @@ public class FinnhubWebSocketClient {
     private final FinnhubPriceService priceService;
     private final BreakoutEngineService breakoutEngineService;
     private final PremarketLevelsService premarketLevelsService;
-    private final SimpMessagingTemplate messagingTemplate;  // ⭐ NEW: For STOMP broadcasts
+    private final SimpMessagingTemplate messagingTemplate;
+    
+    private static final int MAX_SYMBOLS_PER_CONNECTION = 30;
+    
+    @Autowired
+    private AlpacaDataService alpacaDataService;
 
-    private WebSocketSession session;
-
-    private final CopyOnWriteArrayList<String> subscribedSymbols = new CopyOnWriteArrayList<>();
+    // List of all active WebSocket sessions
+    private final List<WebSocketSession> sessions = new CopyOnWriteArrayList<>();
+    
+    // Map symbol -> connection index (0, 1, 2...)
+    private final ConcurrentHashMap<String, Integer> symbolToConnection = new ConcurrentHashMap<>();
+    
+    // List of symbols per connection
+    private final List<CopyOnWriteArrayList<String>> connectionSymbols = new CopyOnWriteArrayList<>();
+    
+    // Connection counter
+    private final AtomicInteger connectionCount = new AtomicInteger(0);
 
     public FinnhubWebSocketClient(FinnhubPriceService priceService,
                                   BreakoutEngineService breakoutEngineService,
                                   PremarketLevelsService premarketLevelsService,
-                                  SimpMessagingTemplate messagingTemplate) {  // ⭐ NEW constructor param
+                                  SimpMessagingTemplate messagingTemplate) {
         this.priceService = priceService;
         this.breakoutEngineService = breakoutEngineService;
         this.premarketLevelsService = premarketLevelsService;
@@ -39,19 +57,30 @@ public class FinnhubWebSocketClient {
 
     @PostConstruct
     public void connect() {
+        // Start with 2 connections for up to 60 symbols
+        addNewConnection(); // Connection #0
+        addNewConnection(); // Connection #1
+        System.out.println("🚀 Finnhub WebSocket: 2 connections initialized (supports up to 60 symbols)");
+    }
+
+    private void addNewConnection() {
         try {
             String url = "wss://ws.finnhub.io?token=" + apiKey;
             StandardWebSocketClient client = new StandardWebSocketClient();
+            int connectionId = connectionCount.getAndIncrement();
+            
+            connectionSymbols.add(new CopyOnWriteArrayList<>());
 
             client.doHandshake(new WebSocketHandler() {
 
                 @Override
                 public void afterConnectionEstablished(WebSocketSession session) {
-                    FinnhubWebSocketClient.this.session = session;
-
-                    // Re-subscribe to all symbols after reconnect
-                    for (String symbol : subscribedSymbols) {
-                        subscribe(symbol);
+                    sessions.add(session);
+                    System.out.println("✅ Finnhub WebSocket connection #" + connectionId + " established");
+                    
+                    // Re-subscribe to symbols for this connection
+                    for (String symbol : connectionSymbols.get(connectionId)) {
+                        subscribeOnConnection(session, symbol);
                     }
                 }
 
@@ -67,40 +96,45 @@ public class FinnhubWebSocketClient {
 
                         for (int i = 0; i < dataArray.length(); i++) {
                             JSONObject obj = dataArray.getJSONObject(i);
-
                             String symbol = obj.getString("s");
                             double price = obj.getDouble("p");
                             long timestampMs = obj.getLong("t");
 
-                            // ⭐ Update real-time price store
                             priceService.updatePrice(symbol, price);
 
-                            // ⭐ Feed tick into breakout engine
+                            PremarketLevels levels = premarketLevelsService.getLevels(symbol);
+                            
+                            if (levels == null || levels.getHigh() == 0) {
+                                levels = alpacaDataService.getPremarketLevels(symbol);
+                                if (levels != null && levels.getHigh() > 0) {
+                                    premarketLevelsService.setLevels(symbol, levels);
+                                }
+                            }
+
                             breakoutEngineService.onTick(
                                     symbol,
                                     price,
                                     Instant.ofEpochMilli(timestampMs),
-                                    premarketLevelsService.getLevels(symbol)
+                                    levels
                             );
 
-                            // ⭐ NEW: Broadcast price update to all STOMP clients
                             broadcastPriceUpdate(symbol, price);
                         }
 
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        System.out.println("❌ Error handling Finnhub message: " + e.getMessage());
                     }
                 }
 
                 @Override
                 public void handleTransportError(WebSocketSession session, Throwable exception) {
-                    exception.printStackTrace();
+                    System.out.println("⚠️ Finnhub WebSocket error on connection #" + connectionId + ": " + exception.getMessage());
                 }
 
                 @Override
                 public void afterConnectionClosed(WebSocketSession session, CloseStatus closeStatus) {
-                    System.out.println("Finnhub WebSocket closed: " + closeStatus.getReason());
-                    // Optional: auto-reconnect logic can be added here
+                    sessions.remove(session);
+                    System.out.println("🔌 Finnhub WebSocket connection #" + connectionId + " closed");
                 }
 
                 @Override
@@ -111,11 +145,56 @@ public class FinnhubWebSocketClient {
             }, url);
 
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println("❌ Failed to create Finnhub WebSocket connection: " + e.getMessage());
         }
     }
 
-    // ⭐ NEW: Broadcast price update to STOMP clients
+    private void subscribeOnConnection(WebSocketSession session, String symbol) {
+        try {
+            if (session != null && session.isOpen()) {
+                String msg = "{\"type\":\"subscribe\",\"symbol\":\"" + symbol + "\"}";
+                session.sendMessage(new TextMessage(msg));
+                System.out.println("📡 Subscribed to Finnhub: " + symbol);
+            }
+        } catch (Exception e) {
+            System.out.println("❌ Error subscribing to " + symbol + ": " + e.getMessage());
+        }
+    }
+
+    public void subscribe(String symbol) {
+        // Check if symbol is already subscribed
+        if (symbolToConnection.containsKey(symbol)) {
+            return;
+        }
+        
+        // Find a connection with available slots
+        int connectionId = -1;
+        for (int i = 0; i < connectionSymbols.size(); i++) {
+            if (connectionSymbols.get(i).size() < MAX_SYMBOLS_PER_CONNECTION) {
+                connectionId = i;
+                break;
+            }
+        }
+        
+        // If no available connection, create a new one
+        if (connectionId == -1) {
+            addNewConnection();
+            connectionId = connectionSymbols.size() - 1;
+        }
+        
+        // Add symbol to the connection
+        connectionSymbols.get(connectionId).add(symbol);
+        symbolToConnection.put(symbol, connectionId);
+        
+        // Subscribe on the existing session if available
+        if (sessions.size() > connectionId && sessions.get(connectionId) != null) {
+            subscribeOnConnection(sessions.get(connectionId), symbol);
+        }
+        
+        System.out.println("📋 Symbol " + symbol + " assigned to connection #" + connectionId + 
+                          " (" + connectionSymbols.get(connectionId).size() + "/" + MAX_SYMBOLS_PER_CONNECTION + " symbols)");
+    }
+
     private void broadcastPriceUpdate(String symbol, double price) {
         try {
             JSONObject priceMessage = new JSONObject();
@@ -123,26 +202,9 @@ public class FinnhubWebSocketClient {
             priceMessage.put("price", price);
             priceMessage.put("timestamp", Instant.now().toString());
 
-            // Send to /topic/prices (your frontend is subscribed here)
             messagingTemplate.convertAndSend("/topic/prices", priceMessage.toString());
         } catch (Exception e) {
-            System.out.println("Error broadcasting price update: " + e.getMessage());
-        }
-    }
-
-    public void subscribe(String symbol) {
-        try {
-            if (session != null && session.isOpen()) {
-                String msg = "{\"type\":\"subscribe\",\"symbol\":\"" + symbol + "\"}";
-                session.sendMessage(new TextMessage(msg));
-            }
-
-            if (!subscribedSymbols.contains(symbol)) {
-                subscribedSymbols.add(symbol);
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println("⚠️ Error broadcasting price update: " + e.getMessage());
         }
     }
 }

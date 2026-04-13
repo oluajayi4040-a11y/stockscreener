@@ -1,5 +1,6 @@
 package stockscreener.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import stockscreener.model.PremarketLevels;
 
@@ -26,8 +27,12 @@ public class BreakoutEngineService {
     // Symbols that have already broken out (persist until cutoff)
     private final Map<String, BreakoutInfo> breakoutBySymbol = new ConcurrentHashMap<>();
 
-    // ⭐ NEW — alert broadcaster
+    // ⭐ Alert broadcaster
     private final AlertBroadcastService alertBroadcastService;
+
+    // ⭐ Alpaca data service for fallback levels
+    @Autowired
+    private AlpacaDataService alpacaDataService;
 
     public BreakoutEngineService(AlertBroadcastService alertBroadcastService) {
         this.alertBroadcastService = alertBroadcastService;
@@ -121,6 +126,27 @@ public class BreakoutEngineService {
     }
 
     /**
+     * Creates artificial premarket levels based on previous close
+     * Used as fallback when real premarket data is unavailable
+     */
+    private PremarketLevels getArtificialLevels(String symbol) {
+        try {
+            Double previousClose = alpacaDataService.getPreviousClose(symbol);
+            if (previousClose != null && previousClose > 0) {
+                // Create artificial 2% range for breakout detection
+                double high = previousClose * 1.02;
+                double low = previousClose * 0.98;
+                System.out.println("📊 Using artificial levels for " + symbol + " (previous close: $" + previousClose + ")");
+                System.out.println("   → Artificial H: $" + String.format("%.2f", high) + ", L: $" + String.format("%.2f", low));
+                return new PremarketLevels(high, low, previousClose);
+            }
+        } catch (Exception e) {
+            System.out.println("⚠️ Could not create artificial levels for " + symbol + ": " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
      * Call this from your Finnhub WebSocket tick handler.
      *
      * @param symbol   ticker symbol
@@ -129,8 +155,12 @@ public class BreakoutEngineService {
      * @param levels   premarket levels for this symbol (high/low)
      */
     public void onTick(String symbol, double price, Instant tsUtc, PremarketLevels levels) {
-        if (levels == null) {
-            return; // no premarket levels → no breakout logic
+        // ⭐ If no premarket levels, try to create artificial ones
+        if (levels == null || levels.getHigh() == 0) {
+            levels = getArtificialLevels(symbol);
+            if (levels == null || levels.getHigh() == 0) {
+                return; // Still no levels, skip breakout logic
+            }
         }
 
         ZonedDateTime tickTimeEt = tsUtc.atZone(NEW_YORK);
@@ -188,8 +218,10 @@ public class BreakoutEngineService {
 
         if (close > preHigh) {
             direction = Direction.BULLISH;
+            System.out.println("🚨 BULLISH breakout detected for " + symbol + " at $" + close + " (High: $" + preHigh + ")");
         } else if (close < preLow) {
             direction = Direction.BEARISH;
+            System.out.println("🚨 BEARISH breakout detected for " + symbol + " at $" + close + " (Low: $" + preLow + ")");
         }
 
         if (direction != null) {
@@ -202,7 +234,7 @@ public class BreakoutEngineService {
             );
             breakoutBySymbol.put(symbol, info);
 
-            // ⭐ NEW — send breakout alert to frontend WebSocket
+            // ⭐ Send breakout alert to frontend WebSocket
             if (direction == Direction.BULLISH) {
                 alertBroadcastService.sendBreakoutAlert(symbol, "HIGH");
             } else {
@@ -233,5 +265,6 @@ public class BreakoutEngineService {
     public void resetForNextSession() {
         currentCandleBySymbol.clear();
         breakoutBySymbol.clear();
+        System.out.println("🔄 Breakout engine reset for next session");
     }
 }

@@ -3,7 +3,7 @@ package stockscreener.controller;
 import org.springframework.web.bind.annotation.*;
 import stockscreener.dto.QuoteDTO;
 import stockscreener.model.PremarketLevels;
-import stockscreener.service.PolygonService;
+import stockscreener.service.AlpacaDataService;  // ⭐ Changed from PolygonService
 import stockscreener.service.FinnhubPriceService;
 
 @RestController
@@ -11,20 +11,20 @@ import stockscreener.service.FinnhubPriceService;
 @CrossOrigin(origins = "*")
 public class MarketDataController {
 
-    private final PolygonService polygonService;
+    private final AlpacaDataService alpacaDataService;  // ⭐ Changed from PolygonService
     private final FinnhubPriceService finnhubPriceService;
 
     public MarketDataController(
-            PolygonService polygonService,
+            AlpacaDataService alpacaDataService,  // ⭐ Changed from PolygonService
             FinnhubPriceService finnhubPriceService
     ) {
-        this.polygonService = polygonService;
+        this.alpacaDataService = alpacaDataService;  // ⭐ Changed
         this.finnhubPriceService = finnhubPriceService;
     }
 
     @GetMapping("/premarket/{symbol}")
     public PremarketLevels getPremarketLevels(@PathVariable String symbol) {
-        return polygonService.getPremarketLevels(symbol.toUpperCase());
+        return alpacaDataService.getPremarketLevels(symbol.toUpperCase());  // ⭐ Changed
     }
 
     @GetMapping("/price/{symbol}")
@@ -36,7 +36,7 @@ public class MarketDataController {
     public QuoteDTO getCleanQuote(@PathVariable String symbol) {
 
         String sym = symbol.toUpperCase();
-        PremarketLevels levels = polygonService.getPremarketLevels(sym);
+        PremarketLevels levels = alpacaDataService.getPremarketLevels(sym);  // ⭐ Changed
         double price = finnhubPriceService.getLatestPrice(sym);
 
         return new QuoteDTO(

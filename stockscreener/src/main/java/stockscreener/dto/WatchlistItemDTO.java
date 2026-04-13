@@ -3,6 +3,7 @@ package stockscreener.dto;
 public class WatchlistItemDTO {
 
     private String symbol;
+    private String companyName;  // ⭐ NEW: Company name field
     private double price;
     private double premarketHigh;
     private double premarketLow;
@@ -14,7 +15,7 @@ public class WatchlistItemDTO {
     private String breakoutDirection;
     private String breakoutTime;
 
-    // Constructor
+    // ⭐ Original constructor (6 parameters) - kept for backward compatibility
     public WatchlistItemDTO(String symbol,
                             double price,
                             double premarketHigh,
@@ -22,6 +23,27 @@ public class WatchlistItemDTO {
                             double previousClose,
                             double marketOpen) {
         this.symbol = symbol;
+        this.companyName = symbol;  // Default to symbol if no name provided
+        this.price = price;
+        this.premarketHigh = premarketHigh;
+        this.premarketLow = premarketLow;
+        this.previousClose = previousClose;
+        this.marketOpen = marketOpen;
+        this.hasBreakout = false;
+        this.breakoutDirection = null;
+        this.breakoutTime = null;
+    }
+
+    // ⭐ NEW Constructor with company name (7 parameters)
+    public WatchlistItemDTO(String symbol,
+                            String companyName,
+                            double price,
+                            double premarketHigh,
+                            double premarketLow,
+                            double previousClose,
+                            double marketOpen) {
+        this.symbol = symbol;
+        this.companyName = companyName != null ? companyName : symbol;
         this.price = price;
         this.premarketHigh = premarketHigh;
         this.premarketLow = premarketLow;
@@ -35,6 +57,10 @@ public class WatchlistItemDTO {
     // Getters
     public String getSymbol() {
         return symbol;
+    }
+
+    public String getCompanyName() {  // ⭐ NEW getter
+        return companyName;
     }
 
     public double getPrice() {
@@ -91,6 +117,7 @@ public class WatchlistItemDTO {
     public String toString() {
         return "WatchlistItemDTO{" +
                 "symbol='" + symbol + '\'' +
+                ", companyName='" + companyName + '\'' +
                 ", price=" + price +
                 ", premarketHigh=" + premarketHigh +
                 ", premarketLow=" + premarketLow +
