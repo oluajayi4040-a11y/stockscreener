@@ -20,10 +20,10 @@ public class WatchlistService {
     private WatchlistRepository repo;
 
     @Autowired
-    private FinnhubWebSocketClient finnhubWebSocketClient;
+    private AlpacaWebSocketClient alpacaWebSocketClient;
 
     @Autowired
-    private FinnhubPriceService finnhubPriceService;
+    private AlpacaPriceService alpacaPriceService;  // ⭐ Changed from FinnhubPriceService
 
     @Autowired
     private BreakoutEngineService breakoutEngineService;
@@ -58,7 +58,7 @@ public class WatchlistService {
                 System.out.println("⚠️ No premarket levels for " + symbol + " from Alpaca");
             }
 
-            finnhubWebSocketClient.subscribe(symbol);
+            alpacaWebSocketClient.subscribe(symbol);
         }
 
         System.out.println("⭐ Premarket levels loaded for all symbols at startup.");
@@ -120,13 +120,14 @@ public class WatchlistService {
 
         for (Watchlist entity : watchlistEntities) {
             String symbol = entity.getSymbol();
-            String companyName = entity.getCompanyName(); // ⭐ Get stored company name
+            String companyName = entity.getCompanyName();
             
             PremarketLevels levels = premarketLevelsService.getLevels(symbol);
             double preHigh = (levels != null) ? levels.getHigh() : 0.0;
             double preLow  = (levels != null) ? levels.getLow()  : 0.0;
 
-            double latestPrice = finnhubPriceService.getLatestPrice(symbol);
+            // ⭐ Using AlpacaPriceService
+            double latestPrice = alpacaPriceService.getLatestPrice(symbol);
             double previousClose = getPreviousClose(symbol);
             double marketOpen = getMarketOpen(symbol);
 
@@ -139,10 +140,9 @@ public class WatchlistService {
             String breakoutDirection = hasBreakout ? breakout.getDirection().name() : null;
             String breakoutTime = hasBreakout ? breakout.getBreakoutTimeEt().toString() : null;
 
-            // ⭐ Build DTO with company name
             WatchlistItemDTO dto = new WatchlistItemDTO(
                     symbol,
-                    companyName,  // ⭐ NEW: Pass company name
+                    companyName,
                     latestPrice,
                     preHigh,
                     preLow,
@@ -165,10 +165,8 @@ public class WatchlistService {
     public Watchlist addSymbol(String symbol) {
         String sym = symbol.toUpperCase();
         
-        // ⭐ Fetch company name from Alpaca (or fallback to symbol)
         String companyName = alpacaDataService.getCompanyName(sym);
         
-        // ⭐ Create watchlist entry with company name
         Watchlist item = new Watchlist(sym, companyName);
         Watchlist saved = repo.save(item);
 
@@ -181,7 +179,7 @@ public class WatchlistService {
             System.out.println("⚠️ No premarket levels for " + sym);
         }
 
-        finnhubWebSocketClient.subscribe(sym);
+        alpacaWebSocketClient.subscribe(sym);
 
         return saved;
     }

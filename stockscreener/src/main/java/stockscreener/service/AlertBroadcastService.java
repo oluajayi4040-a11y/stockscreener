@@ -16,16 +16,20 @@ public class AlertBroadcastService {
         this.priceWebSocketHandler = priceWebSocketHandler;
     }
 
-    // ⭐ EXISTING FUNCTION — UNTOUCHED
     // Send alert to all STOMP subscribers in real time
     public void sendAlert(PremarketAlert alert) {
         messagingTemplate.convertAndSend("/topic/alerts", alert);
     }
 
-    // ⭐ NEW FUNCTION — ADDED WITHOUT CHANGING ANYTHING ABOVE
     // Send breakout alert to raw WebSocket clients (ws://localhost:8080/alerts)
+    // Original method for backward compatibility
     public void sendBreakoutAlert(String symbol, String type) {
-        System.out.println("🚨 Broadcasting breakout alert: " + symbol + " (" + type + ")");
-        priceWebSocketHandler.broadcastAlert(symbol, type);
+        sendBreakoutAlert(symbol, type, "PRIMARY");
+    }
+
+    // ⭐ NEW METHOD with candle type support
+    public void sendBreakoutAlert(String symbol, String type, String candleType) {
+        System.out.println("🚨 Broadcasting breakout alert: " + symbol + " (" + type + ") - " + candleType + " candle");
+        priceWebSocketHandler.broadcastAlert(symbol, type, candleType);
     }
 }

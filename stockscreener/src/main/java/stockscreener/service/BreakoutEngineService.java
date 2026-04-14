@@ -14,23 +14,28 @@ public class BreakoutEngineService {
     private static final ZoneId NEW_YORK = ZoneId.of("America/New_York");
     private static final ZoneId CHICAGO = ZoneId.of("America/Chicago");
 
-    // Breakout window: 9:30–9:40 AM ET
-    private static final LocalTime BREAKOUT_START_ET = LocalTime.of(9, 30);
-    private static final LocalTime BREAKOUT_END_ET   = LocalTime.of(9, 40);
+    // Primary breakout window: 8:30 - 8:40 AM CST (1-min and 5-min candles)
+    private static final LocalTime PRIMARY_START_CST = LocalTime.of(8, 30);
+    private static final LocalTime PRIMARY_END_CST = LocalTime.of(8, 40);
+    
+    // Secondary breakout window: 8:45 - 9:02 AM CST (15-min candles only)
+    // This captures the 9:00 AM 15-minute candle close
+    private static final LocalTime SECONDARY_START_CST = LocalTime.of(8, 45);
+    private static final LocalTime SECONDARY_END_CST = LocalTime.of(9, 2);
 
-    // Dashboard visibility cutoff: 3:00 PM CST (4:00 PM ET)
-    private static final LocalTime DASHBOARD_CUTOFF_ET = LocalTime.of(16, 0);
+    // Dashboard visibility cutoff: 10 PM CST (11 PM ET)
+    private static final LocalTime DASHBOARD_CUTOFF_ET = LocalTime.of(23, 0);
 
-    // In-memory per-symbol current candle
-    private final Map<String, Candle> currentCandleBySymbol = new ConcurrentHashMap<>();
+    private final Map<String, Candle> currentOneMinuteCandleBySymbol = new ConcurrentHashMap<>();
+    private final Map<String, FiveMinuteCandle> currentFiveMinuteCandleBySymbol = new ConcurrentHashMap<>();
+    private final Map<String, FifteenMinuteCandle> currentFifteenMinuteCandleBySymbol = new ConcurrentHashMap<>();
+    private final Map<String, Set<String>> triggeredBreakouts = new ConcurrentHashMap<>();
 
-    // Symbols that have already broken out (persist until cutoff)
-    private final Map<String, BreakoutInfo> breakoutBySymbol = new ConcurrentHashMap<>();
-
-    // ⭐ Alert broadcaster
     private final AlertBroadcastService alertBroadcastService;
-
-    // ⭐ Alpaca data service for fallback levels
+    
+    @Autowired
+    private PremarketLevelsService premarketLevelsService;
+    
     @Autowired
     private AlpacaDataService alpacaDataService;
 
@@ -38,10 +43,8 @@ public class BreakoutEngineService {
         this.alertBroadcastService = alertBroadcastService;
     }
 
-    public enum Direction {
-        BULLISH,
-        BEARISH
-    }
+    public enum Direction { BULLISH, BEARISH }
+    public enum CandleType { ONE_MINUTE, FIVE_MINUTE, FIFTEEN_MINUTE }
 
     public static class BreakoutInfo {
         private final String symbol;
@@ -49,222 +52,236 @@ public class BreakoutEngineService {
         private final ZonedDateTime breakoutTimeEt;
         private final double premarketHigh;
         private final double premarketLow;
+        private final CandleType candleType;
+        private final double triggeredPrice;
 
-        public BreakoutInfo(String symbol,
-                            Direction direction,
-                            ZonedDateTime breakoutTimeEt,
-                            double premarketHigh,
-                            double premarketLow) {
+        public BreakoutInfo(String symbol, Direction direction, ZonedDateTime breakoutTimeEt,
+                            double premarketHigh, double premarketLow, CandleType candleType, double triggeredPrice) {
             this.symbol = symbol;
             this.direction = direction;
             this.breakoutTimeEt = breakoutTimeEt;
             this.premarketHigh = premarketHigh;
             this.premarketLow = premarketLow;
+            this.candleType = candleType;
+            this.triggeredPrice = triggeredPrice;
         }
 
-        public String getSymbol() {
-            return symbol;
-        }
-
-        public Direction getDirection() {
-            return direction;
-        }
-
-        public ZonedDateTime getBreakoutTimeEt() {
-            return breakoutTimeEt;
-        }
-
-        public double getPremarketHigh() {
-            return premarketHigh;
-        }
-
-        public double getPremarketLow() {
-            return premarketLow;
-        }
+        public String getSymbol() { return symbol; }
+        public Direction getDirection() { return direction; }
+        public ZonedDateTime getBreakoutTimeEt() { return breakoutTimeEt; }
+        public double getPremarketHigh() { return premarketHigh; }
+        public double getPremarketLow() { return premarketLow; }
+        public CandleType getCandleType() { return candleType; }
+        public double getTriggeredPrice() { return triggeredPrice; }
+        public String getAlertType() { return direction == Direction.BULLISH ? "HIGH" : "LOW"; }
     }
 
     private static class Candle {
         private final ZonedDateTime startEt;
-        private double open;
-        private double high;
-        private double low;
-        private double close;
-
+        private double open, high, low, close;
         private Candle(ZonedDateTime startEt, double price) {
             this.startEt = startEt;
-            this.open = price;
-            this.high = price;
-            this.low = price;
-            this.close = price;
+            this.open = this.high = this.low = this.close = price;
         }
-
         private void update(double price) {
             if (price > high) high = price;
-            if (price < low)  low = price;
+            if (price < low) low = price;
             close = price;
         }
-
-        public ZonedDateTime getStartEt() {
-            return startEt;
-        }
-
-        public double getOpen() {
-            return open;
-        }
-
-        public double getHigh() {
-            return high;
-        }
-
-        public double getLow() {
-            return low;
-        }
-
-        public double getClose() {
-            return close;
-        }
+        public ZonedDateTime getStartEt() { return startEt; }
+        public double getClose() { return close; }
     }
 
-    /**
-     * Creates artificial premarket levels based on previous close
-     * Used as fallback when real premarket data is unavailable
-     */
+    private static class FiveMinuteCandle {
+        private final ZonedDateTime startEt;
+        private double open, high, low, close;
+        private FiveMinuteCandle(ZonedDateTime startEt, double price) {
+            this.startEt = startEt;
+            this.open = this.high = this.low = this.close = price;
+        }
+        private void update(double price) {
+            if (price > high) high = price;
+            if (price < low) low = price;
+            close = price;
+        }
+        public ZonedDateTime getStartEt() { return startEt; }
+        public double getClose() { return close; }
+    }
+
+    private static class FifteenMinuteCandle {
+        private final ZonedDateTime startEt;
+        private double open, high, low, close;
+        private FifteenMinuteCandle(ZonedDateTime startEt, double price) {
+            this.startEt = startEt;
+            this.open = this.high = this.low = this.close = price;
+        }
+        private void update(double price) {
+            if (price > high) high = price;
+            if (price < low) low = price;
+            close = price;
+        }
+        public ZonedDateTime getStartEt() { return startEt; }
+        public double getClose() { return close; }
+    }
+
     private PremarketLevels getArtificialLevels(String symbol) {
         try {
             Double previousClose = alpacaDataService.getPreviousClose(symbol);
             if (previousClose != null && previousClose > 0) {
-                // Create artificial 2% range for breakout detection
-                double high = previousClose * 1.02;
-                double low = previousClose * 0.98;
-                System.out.println("📊 Using artificial levels for " + symbol + " (previous close: $" + previousClose + ")");
-                System.out.println("   → Artificial H: $" + String.format("%.2f", high) + ", L: $" + String.format("%.2f", low));
-                return new PremarketLevels(high, low, previousClose);
+                System.out.println("⚠️ Using ARTIFICIAL levels for " + symbol + " (previous close: $" + previousClose + ")");
+                return new PremarketLevels(previousClose * 1.02, previousClose * 0.98, previousClose);
             }
-        } catch (Exception e) {
-            System.out.println("⚠️ Could not create artificial levels for " + symbol + ": " + e.getMessage());
-        }
+        } catch (Exception e) { }
         return null;
     }
 
-    /**
-     * Call this from your Finnhub WebSocket tick handler.
-     *
-     * @param symbol   ticker symbol
-     * @param price    last traded price
-     * @param tsUtc    tick timestamp in UTC (Instant from feed)
-     * @param levels   premarket levels for this symbol (high/low)
-     */
+    private String getTriggerKey(String symbol, Direction direction, CandleType candleType) {
+        return symbol + "_" + direction + "_" + candleType;
+    }
+
+    private boolean hasTriggered(String symbol, Direction direction, CandleType candleType) {
+        Set<String> triggers = triggeredBreakouts.get(symbol);
+        return triggers != null && triggers.contains(getTriggerKey(symbol, direction, candleType));
+    }
+
+    private void markTriggered(String symbol, Direction direction, CandleType candleType) {
+        triggeredBreakouts.computeIfAbsent(symbol, k -> ConcurrentHashMap.newKeySet())
+                          .add(getTriggerKey(symbol, direction, candleType));
+    }
+
     public void onTick(String symbol, double price, Instant tsUtc, PremarketLevels levels) {
-        // ⭐ If no premarket levels, try to create artificial ones
         if (levels == null || levels.getHigh() == 0) {
             levels = getArtificialLevels(symbol);
-            if (levels == null || levels.getHigh() == 0) {
-                return; // Still no levels, skip breakout logic
-            }
+            if (levels == null) return;
         }
 
-        ZonedDateTime tickTimeEt = tsUtc.atZone(NEW_YORK);
-        LocalTime timeEt = tickTimeEt.toLocalTime();
+        ZonedDateTime tickTimeCst = tsUtc.atZone(CHICAGO);
+        LocalTime timeCst = tickTimeCst.toLocalTime();
 
-        // Always ignore ticks after dashboard cutoff (we don't care anymore)
-        if (timeEt.isAfter(DASHBOARD_CUTOFF_ET)) {
-            return;
+        if (ZonedDateTime.now(NEW_YORK).toLocalTime().isAfter(DASHBOARD_CUTOFF_ET)) return;
+
+        // Primary window: 8:30 - 8:40 AM CST (1-min and 5-min candles)
+        if (timeCst.isAfter(PRIMARY_START_CST) && timeCst.isBefore(PRIMARY_END_CST)) {
+            processOneMinuteCandle(symbol, price, tickTimeCst, levels);
+            processFiveMinuteCandle(symbol, price, tickTimeCst, levels);
         }
 
-        // If symbol already broke out, we still update price elsewhere,
-        // but no need to process more candles for breakout logic.
-        if (breakoutBySymbol.containsKey(symbol)) {
-            return;
+        // Secondary window: 8:45 - 9:02 AM CST (15-min candles only)
+        if (timeCst.isAfter(SECONDARY_START_CST) && timeCst.isBefore(SECONDARY_END_CST)) {
+            processFifteenMinuteCandle(symbol, price, tickTimeCst, levels);
         }
+    }
 
-        // Only build candles and check breakouts inside 9:30–9:40 ET
-        if (timeEt.isBefore(BREAKOUT_START_ET) || timeEt.isAfter(BREAKOUT_END_ET)) {
-            return;
-        }
-
-        // Determine the candle start time (truncate to minute)
-        ZonedDateTime candleStartEt = tickTimeEt
-                .withSecond(0)
-                .withNano(0);
-
-        Candle current = currentCandleBySymbol.get(symbol);
-
-        // New candle started
-        if (current == null || !current.getStartEt().equals(candleStartEt)) {
-            // Finalize previous candle (if any) and check for breakout
-            if (current != null) {
-                checkBreakout(symbol, current, levels);
-            }
-            // Start new candle
-            Candle newCandle = new Candle(candleStartEt, price);
-            currentCandleBySymbol.put(symbol, newCandle);
+    private void processOneMinuteCandle(String symbol, double price, ZonedDateTime tickTimeCst, PremarketLevels levels) {
+        ZonedDateTime candleStart = tickTimeCst.withSecond(0).withNano(0);
+        Candle current = currentOneMinuteCandleBySymbol.get(symbol);
+        if (current == null || !current.getStartEt().equals(candleStart)) {
+            if (current != null) checkBreakout(symbol, current.getClose(), levels, CandleType.ONE_MINUTE);
+            currentOneMinuteCandleBySymbol.put(symbol, new Candle(candleStart, price));
         } else {
-            // Update existing candle
             current.update(price);
         }
     }
 
-    private void checkBreakout(String symbol, Candle candle, PremarketLevels levels) {
-        // If already recorded, skip
-        if (breakoutBySymbol.containsKey(symbol)) {
+    private void processFiveMinuteCandle(String symbol, double price, ZonedDateTime tickTimeCst, PremarketLevels levels) {
+        int intervalStart = (tickTimeCst.getMinute() / 5) * 5;
+        ZonedDateTime candleStart = tickTimeCst.withMinute(intervalStart).withSecond(0).withNano(0);
+        FiveMinuteCandle current = currentFiveMinuteCandleBySymbol.get(symbol);
+        if (current == null || !current.getStartEt().equals(candleStart)) {
+            if (current != null) checkBreakout(symbol, current.getClose(), levels, CandleType.FIVE_MINUTE);
+            currentFiveMinuteCandleBySymbol.put(symbol, new FiveMinuteCandle(candleStart, price));
+        } else {
+            current.update(price);
+        }
+    }
+
+    private void processFifteenMinuteCandle(String symbol, double price, ZonedDateTime tickTimeCst, PremarketLevels levels) {
+        int intervalStart = (tickTimeCst.getMinute() / 15) * 15;
+        ZonedDateTime candleStart = tickTimeCst.withMinute(intervalStart).withSecond(0).withNano(0);
+        FifteenMinuteCandle current = currentFifteenMinuteCandleBySymbol.get(symbol);
+        if (current == null || !current.getStartEt().equals(candleStart)) {
+            if (current != null) checkBreakout(symbol, current.getClose(), levels, CandleType.FIFTEEN_MINUTE);
+            currentFifteenMinuteCandleBySymbol.put(symbol, new FifteenMinuteCandle(candleStart, price));
+        } else {
+            current.update(price);
+        }
+    }
+
+    private void checkBreakout(String symbol, double close, PremarketLevels levels, CandleType candleType) {
+        double preHigh = levels.getHigh();
+        double preLow = levels.getLow();
+        
+        // Debug logging
+        System.out.println("🔍 [" + ZonedDateTime.now(CHICAGO).toLocalTime() + "] " + symbol + 
+            " | Candle: " + candleType +
+            " | Close: $" + String.format("%.2f", close) + 
+            " | PreHigh: $" + String.format("%.2f", preHigh) + 
+            " | PreLow: $" + String.format("%.2f", preLow));
+        
+        // Check for BUY signal (price above premarket high)
+        if (close > preHigh && preHigh > 0) {
+            if (!hasTriggered(symbol, Direction.BULLISH, candleType)) {
+                System.out.println("🚨✅ BUY SIGNAL: " + symbol + " (" + candleType + ") closed at $" + close + " (above preHigh $" + preHigh + ")");
+                markTriggered(symbol, Direction.BULLISH, candleType);
+                String candleTypeStr = candleType == CandleType.ONE_MINUTE ? "ONE_MIN" : 
+                                       (candleType == CandleType.FIVE_MINUTE ? "FIVE_MIN" : "FIFTEEN_MIN");
+                alertBroadcastService.sendBreakoutAlert(symbol, "HIGH", candleTypeStr);
+            }
             return;
         }
-
-        double close = candle.getClose();
-        double preHigh = levels.getHigh();
-        double preLow  = levels.getLow();
-
-        Direction direction = null;
-
-        if (close > preHigh) {
-            direction = Direction.BULLISH;
-            System.out.println("🚨 BULLISH breakout detected for " + symbol + " at $" + close + " (High: $" + preHigh + ")");
-        } else if (close < preLow) {
-            direction = Direction.BEARISH;
-            System.out.println("🚨 BEARISH breakout detected for " + symbol + " at $" + close + " (Low: $" + preLow + ")");
-        }
-
-        if (direction != null) {
-            BreakoutInfo info = new BreakoutInfo(
-                    symbol,
-                    direction,
-                    candle.getStartEt().plusMinutes(1), // candle close time
-                    preHigh,
-                    preLow
-            );
-            breakoutBySymbol.put(symbol, info);
-
-            // ⭐ Send breakout alert to frontend WebSocket
-            if (direction == Direction.BULLISH) {
-                alertBroadcastService.sendBreakoutAlert(symbol, "HIGH");
-            } else {
-                alertBroadcastService.sendBreakoutAlert(symbol, "LOW");
+        
+        // Check for SELL signal (price below premarket low)
+        if (close < preLow && preLow > 0) {
+            if (!hasTriggered(symbol, Direction.BEARISH, candleType)) {
+                System.out.println("🚨❌ SELL SIGNAL: " + symbol + " (" + candleType + ") closed at $" + close + " (below preLow $" + preLow + ")");
+                markTriggered(symbol, Direction.BEARISH, candleType);
+                String candleTypeStr = candleType == CandleType.ONE_MINUTE ? "ONE_MIN" : 
+                                       (candleType == CandleType.FIVE_MINUTE ? "FIVE_MIN" : "FIFTEEN_MIN");
+                alertBroadcastService.sendBreakoutAlert(symbol, "LOW", candleTypeStr);
             }
+            return;
         }
     }
 
     /**
-     * Returns all breakouts that should still be visible on the dashboard.
-     * Call this from your WatchlistService / controller.
+     * Get all active breakouts for dashboard display
      */
     public List<BreakoutInfo> getActiveBreakoutsForDashboard() {
         ZonedDateTime nowEt = ZonedDateTime.now(NEW_YORK);
-        LocalTime timeEt = nowEt.toLocalTime();
-
-        // After 4:00 PM ET (3 PM CST), hide all breakouts
-        if (timeEt.isAfter(DASHBOARD_CUTOFF_ET)) {
+        if (nowEt.toLocalTime().isAfter(DASHBOARD_CUTOFF_ET)) {
             return Collections.emptyList();
         }
-
-        return new ArrayList<>(breakoutBySymbol.values());
+        
+        List<BreakoutInfo> allBreakouts = new ArrayList<>();
+        
+        for (Map.Entry<String, Set<String>> entry : triggeredBreakouts.entrySet()) {
+            String symbol = entry.getKey();
+            PremarketLevels levels = premarketLevelsService.getLevels(symbol);
+            double preHigh = levels != null ? levels.getHigh() : 0;
+            double preLow = levels != null ? levels.getLow() : 0;
+            
+            for (String triggerKey : entry.getValue()) {
+                String[] parts = triggerKey.split("_");
+                if (parts.length >= 3) {
+                    Direction direction = Direction.valueOf(parts[1]);
+                    CandleType candleType = CandleType.valueOf(parts[2]);
+                    
+                    BreakoutInfo info = new BreakoutInfo(
+                        symbol, direction, ZonedDateTime.now(NEW_YORK),
+                        preHigh, preLow, candleType, 0
+                    );
+                    allBreakouts.add(info);
+                }
+            }
+        }
+        return allBreakouts;
     }
 
-    /**
-     * Optional: clear state at end of day (e.g., via a scheduled job).
-     */
     public void resetForNextSession() {
-        currentCandleBySymbol.clear();
-        breakoutBySymbol.clear();
+        currentOneMinuteCandleBySymbol.clear();
+        currentFiveMinuteCandleBySymbol.clear();
+        currentFifteenMinuteCandleBySymbol.clear();
+        triggeredBreakouts.clear();
         System.out.println("🔄 Breakout engine reset for next session");
     }
 }

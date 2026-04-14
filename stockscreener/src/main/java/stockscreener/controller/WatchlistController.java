@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import stockscreener.dto.WatchlistItemDTO;
 import stockscreener.model.Watchlist;
 import stockscreener.service.WatchlistService;
-import stockscreener.service.FinnhubWebSocketClient;
+import stockscreener.service.AlpacaWebSocketClient;
 
 import java.util.Date;
 import java.util.HashMap;
@@ -23,7 +23,7 @@ public class WatchlistController {
     private WatchlistService service;
 
     @Autowired
-    private FinnhubWebSocketClient finnhubWebSocketClient;
+    private AlpacaWebSocketClient alpacaWebSocketClient;  // ⭐ Changed from FinnhubWebSocketClient
 
     // ⭐ Return watchlist with real-time price + premarket levels
     @GetMapping
@@ -50,12 +50,12 @@ public class WatchlistController {
         }
     }
 
-    // ⭐ Resubscribe a single symbol to WebSocket
+    // ⭐ Resubscribe a single symbol to Alpaca WebSocket
     @PostMapping("/resubscribe/{symbol}")
     public ResponseEntity<String> resubscribe(@PathVariable String symbol) {
         try {
             String sym = symbol.toUpperCase();
-            finnhubWebSocketClient.subscribe(sym);
+            alpacaWebSocketClient.subscribe(sym);
             return ResponseEntity.ok("✅ Resubscribed to " + sym);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -63,14 +63,14 @@ public class WatchlistController {
         }
     }
 
-    // ⭐ Resubscribe all symbols to WebSocket
+    // ⭐ Resubscribe all symbols to Alpaca WebSocket
     @PostMapping("/resubscribe-all")
     public ResponseEntity<String> resubscribeAll() {
         try {
             List<WatchlistItemDTO> watchlist = service.getWatchlistWithPrices();
             int count = 0;
             for (WatchlistItemDTO item : watchlist) {
-                finnhubWebSocketClient.subscribe(item.getSymbol());
+                alpacaWebSocketClient.subscribe(item.getSymbol());
                 count++;
                 Thread.sleep(100);
             }
@@ -81,7 +81,7 @@ public class WatchlistController {
         }
     }
 
-    // ⭐ NEW: Health check endpoint to see price update status
+    // ⭐ Health check endpoint to see price update status
     @GetMapping("/health/prices")
     public Map<String, Object> checkPriceHealth() {
         Map<String, Object> status = new HashMap<>();
@@ -106,7 +106,7 @@ public class WatchlistController {
         return status;
     }
 
-    // ⭐ NEW: Get specific symbol details for debugging
+    // ⭐ Get specific symbol details for debugging
     @GetMapping("/debug/{symbol}")
     public Map<String, Object> debugSymbol(@PathVariable String symbol) {
         Map<String, Object> debug = new HashMap<>();

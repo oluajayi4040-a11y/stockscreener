@@ -4,7 +4,7 @@ import org.springframework.stereotype.Service;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
-public class FinnhubPriceService {
+public class AlpacaPriceService {
 
     private final ConcurrentHashMap<String, Double> latestPrices = new ConcurrentHashMap<>();
 

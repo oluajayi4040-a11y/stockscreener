@@ -1,5 +1,6 @@
 package stockscreener.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -27,9 +28,6 @@ public class AlpacaDataService {
     @Value("${alpaca.base.url}")
     private String baseUrl;
 
-    @Value("${finnhub.api.key}")  // ⭐ Inject Finnhub API key
-    private String finnhubApiKey;
-
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -39,10 +37,13 @@ public class AlpacaDataService {
     private static final long PREMARKET_CACHE_TTL_MS = 60000; // 1 minute during premarket
     private static final long MARKET_HOURS_CACHE_TTL_MS = 86400000; // 24 hours (freeze after market open)
 
-    // ⭐ Cache for company names (permanent, no expiration)
+    // Cache for company names
     private final ConcurrentHashMap<String, String> companyNameCache = new ConcurrentHashMap<>();
 
     private final ZoneId NEW_YORK = ZoneId.of("America/New_York");
+
+    @Autowired
+    private PremarketLevelsService premarketLevelsService;
 
     private HttpHeaders getHeaders() {
         HttpHeaders headers = new HttpHeaders();
@@ -88,7 +89,8 @@ public class AlpacaDataService {
     }
 
     /**
-     * Get premarket high/low for a symbol with smart caching
+     * Get premarket high/low for a symbol using the bars endpoint
+     * This fetches only premarket hours data (4:00 AM - 9:30 AM ET)
      */
     public PremarketLevels getPremarketLevels(String symbol) {
         Long timestamp = cacheTimestamps.get(symbol);
@@ -99,7 +101,6 @@ public class AlpacaDataService {
             
             // After market open, cache for 24 hours (never fetch again until next day)
             if (!isPremarketHours() && !isMarketOpen()) {
-                // After market closed, use cached value or return null
                 PremarketLevels cached = levelsCache.get(symbol);
                 if (cached != null) {
                     return cached;
@@ -111,9 +112,8 @@ public class AlpacaDataService {
             if (isMarketOpen()) {
                 PremarketLevels cached = levelsCache.get(symbol);
                 if (cached != null) {
-                    return cached; // Return frozen premarket levels
+                    return cached;
                 }
-                // If no cache during market hours, fetch once
             }
             
             // During premarket hours (4:00 AM - 9:30 AM) - refresh every minute
@@ -125,9 +125,26 @@ public class AlpacaDataService {
             }
         }
 
-        // Fetch from Alpaca API
+        // Fetch premarket data from Alpaca API using bars endpoint
         try {
-            String url = baseUrl + "/v2/stocks/" + symbol + "/snapshot";
+            LocalDate today = LocalDate.now(NEW_YORK);
+            
+            // ⭐ FIXED: Use RFC3339 timestamps with time (4:00 AM to 9:30 AM ET)
+            ZonedDateTime premarketStart = ZonedDateTime.of(today, LocalTime.of(4, 0), NEW_YORK);
+            ZonedDateTime premarketEnd = ZonedDateTime.of(today, LocalTime.of(9, 30), NEW_YORK);
+            
+            // Convert to RFC3339 format (e.g., "2026-04-14T04:00:00-04:00")
+            String startTime = premarketStart.toOffsetDateTime().toString();
+            String endTime = premarketEnd.toOffsetDateTime().toString();
+            
+            // Use the bars endpoint to get only premarket data
+            String url = String.format(
+                "%s/v2/stocks/%s/bars?timeframe=1Min&start=%s&end=%s&limit=1000&feed=sip",
+                baseUrl, symbol, startTime, endTime
+            );
+            
+            System.out.println("📡 Fetching premarket data for " + symbol + " from " + startTime + " to " + endTime);
+            
             HttpEntity<String> entity = new HttpEntity<>(getHeaders());
             ResponseEntity<String> response = restTemplate.exchange(
                 url, HttpMethod.GET, entity, String.class
@@ -135,43 +152,56 @@ public class AlpacaDataService {
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode root = mapper.readTree(response.getBody());
+                JsonNode bars = root.get("bars");
+                
+                if (bars != null && bars.isArray() && bars.size() > 0) {
+                    double high = 0;
+                    double low = Double.MAX_VALUE;
+                    double open = 0;
+                    boolean firstBar = true;
 
-                double high = 0;
-                double low = 0;
-                double open = 0;
-
-                // Get current minute bar (includes premarket)
-                if (root.has("minuteBar") && !root.get("minuteBar").isNull()) {
-                    JsonNode minuteBar = root.get("minuteBar");
-                    high = minuteBar.has("h") ? minuteBar.get("h").asDouble() : 0;
-                    low = minuteBar.has("l") ? minuteBar.get("l").asDouble() : 0;
-                    open = minuteBar.has("o") ? minuteBar.get("o").asDouble() : 0;
-                }
-
-                // If minuteBar is not available, get from daily bar
-                if (high == 0 && root.has("dailyBar") && !root.get("dailyBar").isNull()) {
-                    JsonNode dailyBar = root.get("dailyBar");
-                    high = dailyBar.has("h") ? dailyBar.get("h").asDouble() : 0;
-                    low = dailyBar.has("l") ? dailyBar.get("l").asDouble() : 0;
-                    open = dailyBar.has("o") ? dailyBar.get("o").asDouble() : 0;
-                }
-
-                if (high > 0 && low > 0) {
-                    PremarketLevels levels = new PremarketLevels(high, low, open);
-                    levelsCache.put(symbol, levels);
-                    cacheTimestamps.put(symbol, System.currentTimeMillis());
+                    for (JsonNode bar : bars) {
+                        double h = bar.get("h").asDouble();
+                        double l = bar.get("l").asDouble();
+                        double o = bar.get("o").asDouble();
+                        
+                        if (h > high) high = h;
+                        if (l < low) low = l;
+                        if (firstBar) {
+                            open = o;
+                            firstBar = false;
+                        }
+                    }
                     
-                    String timeOfDay = isPremarketHours() ? "PRE-MARKET" : (isMarketOpen() ? "MARKET HOURS" : "AFTER HOURS");
-                    System.out.println("✅ Alpaca premarket for " + symbol + " - H: " + high + ", L: " + low + " (" + timeOfDay + ")");
-                    return levels;
+                    if (low != Double.MAX_VALUE && high > 0) {
+                        PremarketLevels levels = new PremarketLevels(high, low, open);
+                        levelsCache.put(symbol, levels);
+                        cacheTimestamps.put(symbol, System.currentTimeMillis());
+                        premarketLevelsService.setLevels(symbol, levels);
+                        
+                        System.out.println("✅ Premarket for " + symbol + " - H: " + high + ", L: " + low + ", Open: " + open);
+                        return levels;
+                    } else {
+                        System.out.println("⚠️ No premarket bars found for " + symbol);
+                    }
+                } else {
+                    System.out.println("⚠️ No bars data for " + symbol);
                 }
+            } else {
+                System.out.println("⚠️ Failed to fetch premarket data for " + symbol + " - Status: " + response.getStatusCode());
             }
         } catch (Exception e) {
-            System.out.println("❌ Alpaca error for " + symbol + ": " + e.getMessage());
+            System.out.println("❌ Error fetching premarket for " + symbol + ": " + e.getMessage());
         }
         
         // Return cached value if available, otherwise null
-        return levelsCache.get(symbol);
+        PremarketLevels cached = levelsCache.get(symbol);
+        if (cached != null) {
+            System.out.println("📦 Using cached premarket levels for " + symbol);
+            return cached;
+        }
+        
+        return null;
     }
 
     /**
@@ -221,8 +251,8 @@ public class AlpacaDataService {
     }
 
     /**
-     * Get company name for a symbol using Finnhub API
-     * Fetches once and caches permanently
+     * Get company name for a symbol
+     * Returns the symbol as fallback (can be enhanced later)
      */
     public String getCompanyName(String symbol) {
         // Check cache first
@@ -230,28 +260,7 @@ public class AlpacaDataService {
             return companyNameCache.get(symbol);
         }
         
-        try {
-            // Use Finnhub API to get company profile
-            String url = "https://finnhub.io/api/v1/stock/profile2?symbol=" + symbol + "&token=" + finnhubApiKey;
-            
-            ResponseEntity<String> response = restTemplate.exchange(
-                url, HttpMethod.GET, null, String.class
-            );
-            
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                JsonNode root = mapper.readTree(response.getBody());
-                if (root.has("name") && !root.get("name").isNull()) {
-                    String companyName = root.get("name").asText();
-                    companyNameCache.put(symbol, companyName);
-                    System.out.println("📛 Fetched company name for " + symbol + ": " + companyName);
-                    return companyName;
-                }
-            }
-        } catch (Exception e) {
-            System.out.println("⚠️ Could not fetch company name for " + symbol + ": " + e.getMessage());
-        }
-        
-        // Fallback: Return the symbol as name
+        // For now, return the symbol as the company name
         companyNameCache.put(symbol, symbol);
         return symbol;
     }

@@ -13,22 +13,14 @@ function Dashboard() {
   const previousPrices = useRef({});
   const stompClientRef = useRef(null);
 
-  // Compute Daily % and Intraday %
+  // Compute Daily % only
   const computeMetrics = (item) => {
-    const { price, previousClose, marketOpen } = item;
-
+    const { price, previousClose } = item;
     let dailyChange = 0;
-    let intradayChange = 0;
-
     if (price > 0 && previousClose > 0) {
       dailyChange = ((price - previousClose) / previousClose) * 100;
     }
-
-    if (price > 0 && marketOpen > 0) {
-      intradayChange = ((price - marketOpen) / marketOpen) * 100;
-    }
-
-    return { dailyChange, intradayChange };
+    return { dailyChange };
   };
 
   // Load watchlist from backend
@@ -38,8 +30,7 @@ function Dashboard() {
       const data = await response.json();
 
       const enriched = data.map((item) => {
-        const { dailyChange, intradayChange } = computeMetrics(item);
-
+        const { dailyChange } = computeMetrics(item);
         const prev = previousPrices.current[item.symbol];
         let flashClass = "";
 
@@ -57,7 +48,6 @@ function Dashboard() {
           premarketHigh: item.premarketHigh,
           premarketLow: item.premarketLow,
           dailyChange,
-          intradayChange,
           flashClass,
         };
       });
@@ -69,9 +59,27 @@ function Dashboard() {
     }
   };
 
+  // Load existing alerts from backend
+  const loadAlerts = async () => {
+    try {
+      const response = await fetch("http://localhost:8080/api/alerts/today");
+      const data = await response.json();
+      const sortedAlerts = data.sort((a, b) => {
+        const timeA = new Date(a.triggeredAt || a.createdAt || 0);
+        const timeB = new Date(b.triggeredAt || b.createdAt || 0);
+        return timeA - timeB;
+      });
+      setBreakouts(sortedAlerts);
+      console.log("📋 Loaded alerts:", sortedAlerts.length);
+    } catch (error) {
+      console.error("Error loading alerts:", error);
+    }
+  };
+
   // STOMP WebSocket for real-time price updates
   useEffect(() => {
     loadWatchlist();
+    loadAlerts();
 
     console.log("🔌 Connecting to STOMP WebSocket...");
     
@@ -109,10 +117,10 @@ function Dashboard() {
               }
 
               const updatedItem = { ...item, price, flashClass };
-              const { dailyChange, intradayChange } = computeMetrics(updatedItem);
+              const { dailyChange } = computeMetrics(updatedItem);
 
               console.log(`🔄 ${symbol} price updated: $${price} (${dailyChange.toFixed(2)}% daily)`);
-              return { ...updatedItem, dailyChange, intradayChange };
+              return { ...updatedItem, dailyChange };
             })
           );
         } catch (error) {
@@ -159,7 +167,24 @@ function Dashboard() {
       try {
         const alert = JSON.parse(event.data);
         console.log("🚨 Breakout alert received:", alert);
-        setBreakouts((prev) => [alert, ...prev]);
+        
+        setBreakouts((prev) => {
+          const newAlert = { ...alert };
+          if (!newAlert.timestamp && newAlert.triggeredAt) {
+            newAlert.timestamp = newAlert.triggeredAt;
+          }
+          if (!newAlert.timestamp) {
+            newAlert.timestamp = new Date().toISOString();
+          }
+          
+          const newList = [...prev, newAlert];
+          newList.sort((a, b) => {
+            const timeA = new Date(a.timestamp || a.triggeredAt || a.createdAt || 0);
+            const timeB = new Date(b.timestamp || b.triggeredAt || b.createdAt || 0);
+            return timeA - timeB;
+          });
+          return newList;
+        });
       } catch (error) {
         console.error("❌ Error parsing alert:", error);
       }
@@ -208,6 +233,8 @@ function Dashboard() {
         console.error(`Failed to delete ${symbol}: ${response.status}`);
       }
       
+      setBreakouts((prev) => prev.filter(b => b.symbol !== symbol));
+      
       await loadWatchlist();
       console.log("✅ Symbol deleted successfully");
     } catch (error) {
@@ -224,9 +251,14 @@ function Dashboard() {
     setExpanded((prev) => ({ ...prev, [symbol]: !prev[symbol] }));
   };
 
-  // Separate breakouts into BUY (HIGH) and SELL (LOW)
-  const buyBreakouts = breakouts.filter(b => b.type === "HIGH");
-  const sellBreakouts = breakouts.filter(b => b.type === "LOW");
+  // Filter breakouts by candle type
+  const oneMinBuy = breakouts.filter(b => b.candleType === "ONE_MIN" && b.type === "HIGH");
+  const oneMinSell = breakouts.filter(b => b.candleType === "ONE_MIN" && b.type === "LOW");
+  const fiveMinBuy = breakouts.filter(b => b.candleType === "FIVE_MIN" && b.type === "HIGH");
+  const fiveMinSell = breakouts.filter(b => b.candleType === "FIVE_MIN" && b.type === "LOW");
+  const fifteenMinBuy = breakouts.filter(b => b.candleType === "FIFTEEN_MIN" && b.type === "HIGH");
+  const fifteenMinSell = breakouts.filter(b => b.candleType === "FIFTEEN_MIN" && b.type === "LOW");
+
   const totalBreakouts = breakouts.length;
 
   return (
@@ -242,7 +274,7 @@ function Dashboard() {
         <div className="profile-icon">👤</div>
       </header>
 
-      {/* STATS - 3 cards */}
+      {/* STATS */}
       <section className="stats-section">
         <div className="stat-card">
           <h3>Total Watchlist</h3>
@@ -258,42 +290,107 @@ function Dashboard() {
         </div>
       </section>
 
-      {/* BUY & SELL BREAKOUT SECTIONS - Two column layout */}
+      {/* 1-MINUTE BREAKOUTS (8:30-8:40 AM CST) */}
       <div className="breakouts-container">
-        {/* BUY Section - Premarket High Breakouts */}
         <div className="breakout-section-buy">
-          <h3>📈 BUY</h3>
-          {buyBreakouts.length === 0 ? (
+          <h3>📈 BUY (1min)</h3>
+          {oneMinBuy.length === 0 ? (
             <p className="empty-breakouts">No buy signals yet</p>
           ) : (
             <ul className="breakout-list">
-              {buyBreakouts.map((b, index) => (
-                <li key={`buy-${b.symbol}-${index}`} className="breakout-item-buy">
+              {oneMinBuy.map((b, index) => (
+                <li key={`buy-1min-${b.symbol}-${index}`} className="breakout-item-buy">
                   <span className="breakout-symbol">{b.symbol}</span>
                   <span className="breakout-direction breakout-direction-buy">▲ HIGH</span>
-                  <div className="breakout-details">
-                    Price: ${b.price} | H: {b.premarketHigh}
-                  </div>
+                  <div className="breakout-details">Price: ${b.price} | H: {b.premarketHigh}</div>
                 </li>
               ))}
             </ul>
           )}
         </div>
-
-        {/* SELL Section - Premarket Low Breakouts */}
         <div className="breakout-section-sell">
-          <h3>📉 SELL</h3>
-          {sellBreakouts.length === 0 ? (
+          <h3>📉 SELL (1min)</h3>
+          {oneMinSell.length === 0 ? (
             <p className="empty-breakouts">No sell signals yet</p>
           ) : (
             <ul className="breakout-list">
-              {sellBreakouts.map((b, index) => (
-                <li key={`sell-${b.symbol}-${index}`} className="breakout-item-sell">
+              {oneMinSell.map((b, index) => (
+                <li key={`sell-1min-${b.symbol}-${index}`} className="breakout-item-sell">
                   <span className="breakout-symbol">{b.symbol}</span>
                   <span className="breakout-direction breakout-direction-sell">▼ LOW</span>
-                  <div className="breakout-details">
-                    Price: ${b.price} | L: {b.premarketLow}
-                  </div>
+                  <div className="breakout-details">Price: ${b.price} | L: {b.premarketLow}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* 5-MINUTE BREAKOUTS (8:30-8:40 AM CST) */}
+      <div className="breakouts-container">
+        <div className="breakout-section-buy">
+          <h3>📈 BUY (5min)</h3>
+          {fiveMinBuy.length === 0 ? (
+            <p className="empty-breakouts">No buy signals yet</p>
+          ) : (
+            <ul className="breakout-list">
+              {fiveMinBuy.map((b, index) => (
+                <li key={`buy-5min-${b.symbol}-${index}`} className="breakout-item-buy">
+                  <span className="breakout-symbol">{b.symbol}</span>
+                  <span className="breakout-direction breakout-direction-buy">▲ HIGH</span>
+                  <div className="breakout-details">Price: ${b.price} | H: {b.premarketHigh}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="breakout-section-sell">
+          <h3>📉 SELL (5min)</h3>
+          {fiveMinSell.length === 0 ? (
+            <p className="empty-breakouts">No sell signals yet</p>
+          ) : (
+            <ul className="breakout-list">
+              {fiveMinSell.map((b, index) => (
+                <li key={`sell-5min-${b.symbol}-${index}`} className="breakout-item-sell">
+                  <span className="breakout-symbol">{b.symbol}</span>
+                  <span className="breakout-direction breakout-direction-sell">▼ LOW</span>
+                  <div className="breakout-details">Price: ${b.price} | L: {b.premarketLow}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* 15-MINUTE BREAKOUTS (After 8:45 AM CST) */}
+      <div className="breakouts-container">
+        <div className="breakout-section-buy">
+          <h3>📈 BUY (15min)</h3>
+          {fifteenMinBuy.length === 0 ? (
+            <p className="empty-breakouts">No buy signals yet</p>
+          ) : (
+            <ul className="breakout-list">
+              {fifteenMinBuy.map((b, index) => (
+                <li key={`buy-15min-${b.symbol}-${index}`} className="breakout-item-buy">
+                  <span className="breakout-symbol">{b.symbol}</span>
+                  <span className="breakout-direction breakout-direction-buy">▲ HIGH</span>
+                  <div className="breakout-details">Price: ${b.price} | H: {b.premarketHigh}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="breakout-section-sell">
+          <h3>📉 SELL (15min)</h3>
+          {fifteenMinSell.length === 0 ? (
+            <p className="empty-breakouts">No sell signals yet</p>
+          ) : (
+            <ul className="breakout-list">
+              {fifteenMinSell.map((b, index) => (
+                <li key={`sell-15min-${b.symbol}-${index}`} className="breakout-item-sell">
+                  <span className="breakout-symbol">{b.symbol}</span>
+                  <span className="breakout-direction breakout-direction-sell">▼ LOW</span>
+                  <div className="breakout-details">Price: ${b.price} | L: {b.premarketLow}</div>
                 </li>
               ))}
             </ul>
@@ -311,7 +408,6 @@ function Dashboard() {
               <th>Company Name</th>
               <th>Price</th>
               <th>Daily %</th>
-              <th>Intraday %</th>
               <th>Premarket</th>
               <th></th>
               <th>Actions</th>
@@ -323,20 +419,11 @@ function Dashboard() {
                 <tr className={item.flashClass}>
                   <td className="symbol-cell">{item.symbol}</td>
                   <td>{item.companyName || item.symbol}</td>
-                  <td>
-                    {item.price && item.price > 0
-                      ? `$${item.price.toFixed(2)}`
-                      : "—"}
-                  </td>
+                  <td>{item.price && item.price > 0 ? `$${item.price.toFixed(2)}` : "—"}</td>
                   <td className={item.dailyChange >= 0 ? "green" : "red"}>
                     {item.dailyChange > 0 && "▲ "}
                     {item.dailyChange < 0 && "▼ "}
                     {formatPercent(item.dailyChange)}
-                  </td>
-                  <td className={item.intradayChange >= 0 ? "green" : "red"}>
-                    {item.intradayChange > 0 && "▲ "}
-                    {item.intradayChange < 0 && "▼ "}
-                    {formatPercent(item.intradayChange)}
                   </td>
                   <td>
                     {item.premarketHigh && item.premarketLow && (item.premarketHigh > 0 || item.premarketLow > 0) ? (
@@ -344,31 +431,22 @@ function Dashboard() {
                         <span>H: {item.premarketHigh.toFixed(2)}</span>
                         <span>L: {item.premarketLow.toFixed(2)}</span>
                       </div>
-                    ) : (
-                      "—"
-                    )}
+                    ) : "—"}
                   </td>
-                  <td>
-                    <button className="expand-btn" onClick={() => toggleExpand(item.symbol)}>
-                      {expanded[item.symbol] ? "▲" : "▼"}
-                    </button>
-                  </td>
-                  <td>
-                    <button className="delete-btn" onClick={() => deleteSymbol(item.symbol)}>
-                      Remove
-                    </button>
-                  </td>
+                  <td><button className="expand-btn" onClick={() => toggleExpand(item.symbol)}>
+                    {expanded[item.symbol] ? "▲" : "▼"}
+                  </button></td>
+                  <td><button className="delete-btn" onClick={() => deleteSymbol(item.symbol)}>Remove</button></td>
                 </tr>
                 {expanded[item.symbol] && (
                   <tr className="expanded-row">
-                    <td colSpan="8">
+                    <td colSpan="7">
                       <div className="expanded-content">
                         <h4>{item.symbol} - {item.companyName || item.symbol} Details</h4>
                         <p><strong>Previous Close:</strong> {item.previousClose > 0 ? item.previousClose.toFixed(2) : "—"}</p>
                         <p><strong>Market Open:</strong> {item.marketOpen > 0 ? item.marketOpen.toFixed(2) : "—"}</p>
                         <p><strong>Latest Price:</strong> {item.price > 0 ? item.price.toFixed(2) : "—"}</p>
                         <p><strong>Daily Change:</strong> {formatPercent(item.dailyChange)}</p>
-                        <p><strong>Intraday Change:</strong> {formatPercent(item.intradayChange)}</p>
                       </div>
                     </td>
                   </tr>
@@ -381,29 +459,13 @@ function Dashboard() {
 
       {/* ADD STOCK */}
       <section className="add-stock-section">
-        <input
-          type="text"
-          placeholder="Enter stock symbol (e.g., AAPL)"
-          className="stock-input"
-          value={newSymbol}
-          onChange={(e) => setNewSymbol(e.target.value)}
-        />
-        <button className="add-btn" onClick={addSymbol}>
-          Add
-        </button>
+        <input type="text" placeholder="Enter stock symbol (e.g., AAPL)" className="stock-input" value={newSymbol} onChange={(e) => setNewSymbol(e.target.value)} />
+        <button className="add-btn" onClick={addSymbol}>Add</button>
       </section>
 
-      {/* CONNECTION STATUS - Footer */}
+      {/* CONNECTION STATUS */}
       <div className="connection-footer">
-        <p style={{ 
-          textAlign: "center", 
-          fontSize: "12px", 
-          color: connectionStatus === "Connected" ? "#16a34a" : "#dc2626",
-          padding: "10px 20px",
-          margin: "0",
-          borderTop: "1px solid #eee",
-          background: "#fafafa"
-        }}>
+        <p style={{ textAlign: "center", fontSize: "12px", color: connectionStatus === "Connected" ? "#16a34a" : "#dc2626", padding: "10px 20px", margin: "0", borderTop: "1px solid #eee", background: "#fafafa" }}>
           🔌 WebSocket Status: {connectionStatus}
         </p>
       </div>
