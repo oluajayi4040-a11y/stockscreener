@@ -1,49 +1,48 @@
 package stockscreener.controller;
 
 import org.springframework.web.bind.annotation.*;
-import stockscreener.dto.QuoteDTO;
+import stockscreener.service.MarketDataClient;
+import stockscreener.service.AlpacaMarketDataService;
+import stockscreener.model.MinuteBar;
 import stockscreener.model.PremarketLevels;
-import stockscreener.service.AlpacaDataService;
-import stockscreener.service.AlpacaPriceService;
 
 @RestController
-@RequestMapping("/market")
+@RequestMapping("/api/market")
 @CrossOrigin(origins = "*")
 public class MarketDataController {
 
-    private final AlpacaDataService alpacaDataService;
-    private final AlpacaPriceService alpacaPriceService;
+    private final MarketDataClient marketDataClient;
+    private final AlpacaMarketDataService marketDataService;
 
-    public MarketDataController(
-            AlpacaDataService alpacaDataService,
-            AlpacaPriceService alpacaPriceService
-    ) {
-        this.alpacaDataService = alpacaDataService;
-        this.alpacaPriceService = alpacaPriceService;
+    public MarketDataController(MarketDataClient marketDataClient,
+                                AlpacaMarketDataService marketDataService) {
+        this.marketDataClient = marketDataClient;
+        this.marketDataService = marketDataService;
     }
 
+    // ------------------------------------------------------------
+    // NEW: Uses service layer with fallback logic (Option 2)
+    // ------------------------------------------------------------
+    @GetMapping("/latest-bar/{symbol}")
+    public MinuteBar getLatestBar(@PathVariable String symbol) {
+        return marketDataService.getLatestBar(symbol);
+    }
+
+    // ------------------------------------------------------------
+    // Existing endpoints (unchanged)
+    // ------------------------------------------------------------
     @GetMapping("/premarket/{symbol}")
-    public PremarketLevels getPremarketLevels(@PathVariable String symbol) {
-        return alpacaDataService.getPremarketLevels(symbol.toUpperCase());
+    public PremarketLevels getPremarket(@PathVariable String symbol) {
+        return marketDataClient.getPremarketLevels(symbol);
     }
 
-    @GetMapping("/price/{symbol}")
-    public double getLatestPrice(@PathVariable String symbol) {
-        return alpacaPriceService.getLatestPrice(symbol.toUpperCase());
+    @GetMapping("/vwap/{symbol}")
+    public Double getVWAP(@PathVariable String symbol) {
+        return marketDataClient.getVWAP(symbol);
     }
 
-    @GetMapping("/quote/{symbol}")
-    public QuoteDTO getCleanQuote(@PathVariable String symbol) {
-
-        String sym = symbol.toUpperCase();
-        PremarketLevels levels = alpacaDataService.getPremarketLevels(sym);
-        double price = alpacaPriceService.getLatestPrice(sym);
-
-        return new QuoteDTO(
-                sym,
-                price,
-                levels != null ? levels.getHigh() : 0,
-                levels != null ? levels.getLow() : 0
-        );
+    @GetMapping("/avg-volume/{symbol}")
+    public Long getAvgVolume(@PathVariable String symbol) {
+        return marketDataClient.getAverage1MinVolume(symbol);
     }
 }

@@ -1,391 +1,69 @@
-/* MAIN CONTAINER */
-.dashboard-container {
-  font-family: "Inter", Arial, sans-serif;
-  background: #f5f6fa;
-  min-height: 100vh;
-}
-
-/* TOP NAVIGATION BAR */
-.top-nav {
-  background: white;
-  padding: 20px 40px;
+/* ------------------------------------------------------------
+   DARK MODE TOGGLE (iOS-style sliding switch)
+------------------------------------------------------------ */
+.toggle-wrapper {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-}
-
-.logo {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: #1a1a1a;
-}
-
-.nav-links span {
-  margin: 0 15px;
+  gap: 10px;
   cursor: pointer;
-  font-size: 1rem;
-  color: #555;
-  transition: 0.3s ease;
 }
 
-.nav-links .active {
-  color: #4f46e5;
-  font-weight: 600;
-}
-
-.nav-links span:hover {
-  color: #4f46e5;
-}
-
-.profile-icon {
-  font-size: 1.4rem;
-}
-
-/* STATS CARDS */
-.stats-section {
-  display: flex;
-  gap: 25px;
-  padding: 40px;
-  flex-wrap: wrap;
-}
-
-.stat-card {
-  background: white;
-  padding: 25px;
-  width: 260px;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-  transition: 0.3s ease;
-}
-
-.stat-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 8px 20px rgba(0,0,0,0.12);
-}
-
-.stat-card h3 {
-  margin-bottom: 10px;
-  font-size: 1.1rem;
-}
-
-.stat-number {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #4f46e5;
-}
-
-/* BREAKOUTS CONTAINER - Two column layout */
-.breakouts-container {
-  display: flex;
-  gap: 20px;
-  padding: 0 40px 20px 40px;
-}
-
-/* BUY SECTION */
-.breakout-section-buy {
-  flex: 1;
-  background: #e8f5e9;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-}
-
-.breakout-section-buy h3 {
-  color: #2e7d32;
-  margin-top: 0;
-  margin-bottom: 15px;
-  font-size: 1.3rem;
-}
-
-/* SELL SECTION */
-.breakout-section-sell {
-  flex: 1;
-  background: #ffebee;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-}
-
-.breakout-section-sell h3 {
-  color: #c62828;
-  margin-top: 0;
-  margin-bottom: 15px;
-  font-size: 1.3rem;
-}
-
-/* Breakout list items */
-.breakout-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.breakout-item-buy {
-  padding: 12px;
-  margin-bottom: 10px;
-  background: white;
-  border-radius: 8px;
-  border-left: 4px solid #2e7d32;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  transition: transform 0.2s ease;
-}
-
-.breakout-item-buy:hover {
-  transform: translateX(4px);
-}
-
-.breakout-item-sell {
-  padding: 12px;
-  margin-bottom: 10px;
-  background: white;
-  border-radius: 8px;
-  border-left: 4px solid #c62828;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  transition: transform 0.2s ease;
-}
-
-.breakout-item-sell:hover {
-  transform: translateX(4px);
-}
-
-.breakout-symbol {
-  font-weight: 700;
-  font-size: 1rem;
-  color: #1a1a1a;
-}
-
-.breakout-direction {
-  font-size: 0.85rem;
-  margin-left: 8px;
-}
-
-.breakout-direction-buy {
-  color: #2e7d32;
-}
-
-.breakout-direction-sell {
-  color: #c62828;
-}
-
-.breakout-details {
-  font-size: 0.75rem;
-  color: #666;
-  margin-top: 6px;
-}
-
-.empty-breakouts {
-  color: #666;
-  font-style: italic;
+.toggle-label {
   font-size: 0.9rem;
-  padding: 20px 0;
-  text-align: center;
+  color: #e5e7eb;
 }
 
-/* WATCHLIST TABLE */
-.table-section {
-  padding: 0 40px 40px;
+.toggle-switch {
+  width: 52px;
+  height: 28px;
+  border-radius: 20px;
+  position: relative;
+  transition: background 0.3s ease;
 }
 
-.table-section h3 {
-  margin-bottom: 15px;
+.toggle-dark {
+  background: #1e293b;
 }
 
-.watchlist-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: white;
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-}
-
-.watchlist-table th,
-.watchlist-table td {
-  padding: 15px;
-  text-align: left;
-  border-bottom: 1px solid #eee;
-}
-
-.watchlist-table th {
-  background: #f0f1f7;
-  font-weight: 600;
-}
-
-.symbol-cell {
-  font-weight: 700;
-  font-size: 1.05rem;
-  color: #1a1a1a;
-}
-
-/* BADGES */
-.green {
-  color: #16a34a;
-  font-weight: 600;
-}
-
-.red {
-  color: #dc2626;
-  font-weight: 600;
-}
-
-.premarket-box {
-  display: flex;
-  flex-direction: column;
-  font-size: 0.85rem;
-  color: #444;
-}
-
-/* EXPAND BUTTON */
-.expand-btn {
-  background: #e5e7eb;
-  border: none;
-  padding: 6px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: 0.2s ease;
-}
-
-.expand-btn:hover {
+.toggle-light {
   background: #d1d5db;
 }
 
-/* EXPANDED ROW */
-.expanded-row td {
-  background: #fafafa;
-  padding: 20px;
+.toggle-circle {
+  width: 22px;
+  height: 22px;
+  background: white;
+  border-radius: 50%;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.3s ease;
 }
 
-.expanded-content {
-  padding: 10px 5px;
+.toggle-dark .toggle-circle {
+  transform: translateX(24px);
 }
 
-.expanded-content h4 {
-  margin-bottom: 10px;
-  font-size: 1.1rem;
-  font-weight: 600;
+/* ------------------------------------------------------------
+   LIGHT MODE THEME
+------------------------------------------------------------ */
+.light-mode .dashboard-container {
+  background: #f8fafc;
+  color: #0f172a;
 }
 
-/* DELETE BUTTON */
-.delete-btn {
-  background: #e11d48;
-  color: white;
-  padding: 8px 14px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: 0.3s ease;
+.light-mode .dashboard-header-title {
+  color: #0f172a;
 }
 
-.delete-btn:hover {
-  background: #be123c;
+.light-mode .dashboard-header-subtitle {
+  color: #475569;
 }
 
-/* ADD STOCK SECTION */
-.add-stock-section {
-  padding: 40px;
-  display: flex;
-  gap: 15px;
+.light-mode .signal-card {
+  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
 }
 
-.stock-input {
-  flex: 1;
-  padding: 14px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
-  font-size: 1rem;
-}
-
-.add-btn {
-  background: #4f46e5;
-  color: white;
-  padding: 14px 28px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: 0.3s ease;
-}
-
-.add-btn:hover {
-  background: #3730a3;
-}
-
-/* =============================== */
-/* FLASH ANIMATIONS FOR PRICE CHANGE */
-/* =============================== */
-
-.flash-green {
-  animation: flashGreen 0.6s ease-out;
-}
-
-.flash-red {
-  animation: flashRed 0.6s ease-out;
-}
-
-@keyframes flashGreen {
-  0% { background-color: rgba(34, 197, 94, 0.3); }
-  100% { background-color: transparent; }
-}
-
-@keyframes flashRed {
-  0% { background-color: rgba(239, 68, 68, 0.3); }
-  100% { background-color: transparent; }
-}
-
-/* =============================== */
-/* RESPONSIVE DESIGN */
-/* =============================== */
-
-@media (max-width: 768px) {
-  .stats-section {
-    padding: 20px;
-    gap: 15px;
-  }
-  
-  .stat-card {
-    width: calc(50% - 15px);
-    padding: 15px;
-  }
-  
-  .stat-number {
-    font-size: 1.5rem;
-  }
-  
-  .breakouts-container {
-    flex-direction: column;
-    padding: 0 20px 20px 20px;
-    gap: 15px;
-  }
-  
-  .table-section {
-    padding: 0 20px 20px;
-    overflow-x: auto;
-  }
-  
-  .watchlist-table {
-    font-size: 0.85rem;
-  }
-  
-  .watchlist-table th,
-  .watchlist-table td {
-    padding: 10px 8px;
-  }
-  
-  .add-stock-section {
-    padding: 20px;
-    flex-direction: column;
-  }
-  
-  .top-nav {
-    padding: 15px 20px;
-  }
-  
-  .logo {
-    font-size: 1.1rem;
-  }
-  
-  .nav-links span {
-    margin: 0 8px;
-    font-size: 0.85rem;
-  }
+.light-mode .empty-state {
+  color: #64748b;
 }

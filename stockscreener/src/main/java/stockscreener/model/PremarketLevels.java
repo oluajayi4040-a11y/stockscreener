@@ -1,57 +1,62 @@
 package stockscreener.model;
 
+/**
+ * Represents premarket levels for a symbol:
+ *  - Premarket High
+ *  - Premarket Low
+ *  - Premarket Open (first premarket candle)
+ *  - Premarket Volume (sum of all premarket bars)
+ *  - Previous Close (yesterday's close)
+ */
 public class PremarketLevels {
 
     private double high;
     private double low;
-    private double open;  // ⭐ NEW: premarket open price (first trade of premarket)
+    private double open;
 
-    // Original constructor (for backward compatibility)
-    public PremarketLevels(double high, double low) {
-        this.high = high;
-        this.low = low;
-        this.open = 0.0;
+    private double premarketVolume;   // NEW
+    private Double previousClose;     // NEW
+
+    public PremarketLevels() {
     }
 
-    // ⭐ NEW constructor with open price
-    public PremarketLevels(double high, double low, double open) {
-        this.high = high;
-        this.low = low;
-        this.open = open;
-    }
-
-    // Getters
     public double getHigh() {
         return high;
+    }
+
+    public void setHigh(double high) {
+        this.high = high;
     }
 
     public double getLow() {
         return low;
     }
 
-    public double getOpen() {
-        return open;
-    }
-
-    // Setters
-    public void setHigh(double high) {
-        this.high = high;
-    }
-
     public void setLow(double low) {
         this.low = low;
+    }
+
+    public double getOpen() {
+        return open;
     }
 
     public void setOpen(double open) {
         this.open = open;
     }
 
-    @Override
-    public String toString() {
-        return "PremarketLevels{" +
-                "high=" + high +
-                ", low=" + low +
-                ", open=" + open +
-                '}';
+    public double getPremarketVolume() {
+        return premarketVolume;
+    }
+
+    public void setPremarketVolume(double premarketVolume) {
+        this.premarketVolume = premarketVolume;
+    }
+
+    public Double getPreviousClose() {
+        return previousClose;
+    }
+
+    public void setPreviousClose(Double previousClose) {
+        this.previousClose = previousClose;
     }
 }
