@@ -88,6 +88,14 @@ export default function Dashboard() {
 
     const slideClass = signal._new ? "slide-in" : "";
 
+    // Strength color coding
+    const strengthColor =
+      signal.strength >= 85
+        ? "strength-strong"
+        : signal.strength >= 60
+        ? "strength-medium"
+        : "strength-weak";
+
     return (
       <div
         key={`${signal.symbol}-${signal.timestamp}-${signal.direction}`}
@@ -118,9 +126,23 @@ export default function Dashboard() {
 
           <span>{formatTime(signal.timestamp)}</span>
         </div>
+
+        {/* Strength Row */}
+        <div className="signal-strength-row">
+          <span className="strength-label">Strength:</span>
+          <span className={`strength-value ${strengthColor}`}>
+            {signal.strength ?? "-"}
+          </span>
+        </div>
       </div>
     );
   };
+
+  // Top Strength Signals
+  const topStrengthSignals = [...buySignals, ...sellSignals]
+    .filter((s) => s.strength !== null && s.strength !== undefined)
+    .sort((a, b) => b.strength - a.strength)
+    .slice(0, 5);
 
   // Layout
   return (
@@ -147,25 +169,41 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* BUY SIGNALS */}
-        <div>
-          <h2 className="section-title-buy">BUY SIGNALS (▲)</h2>
-          {buySignals.length === 0 ? (
-            <div className="empty-state">No buy signals yet.</div>
+        {/* Top Strength Signals */}
+        <div style={{ marginBottom: "35px" }}>
+          <h2 className="section-title-buy">🔥 Top Strength Signals</h2>
+          {topStrengthSignals.length === 0 ? (
+            <div className="empty-state">No strong signals yet.</div>
           ) : (
-            buySignals.map((s) => renderSignalCard(s, "BUY"))
+            topStrengthSignals.map((s) =>
+              renderSignalCard(s, s.direction === "BREAKOUT_UP" ? "BUY" : "SELL")
+            )
           )}
         </div>
 
-        {/* SELL SIGNALS */}
-        <div style={{ marginTop: "30px" }}>
-          <h2 className="section-title-sell">SELL SIGNALS (▼)</h2>
-          {sellSignals.length === 0 ? (
-            <div className="empty-state">No sell signals yet.</div>
-          ) : (
-            sellSignals.map((s) => renderSignalCard(s, "SELL"))
-          )}
+        {/* ⭐ SIDE-BY-SIDE BUY & SELL COLUMNS */}
+        <div className="signal-columns">
+          {/* BUY COLUMN */}
+          <div className="signal-column">
+            <h2 className="section-title-buy">BUY SIGNALS (▲)</h2>
+            {buySignals.length === 0 ? (
+              <div className="empty-state">No buy signals yet.</div>
+            ) : (
+              buySignals.map((s) => renderSignalCard(s, "BUY"))
+            )}
+          </div>
+
+          {/* SELL COLUMN */}
+          <div className="signal-column">
+            <h2 className="section-title-sell">SELL SIGNALS (▼)</h2>
+            {sellSignals.length === 0 ? (
+              <div className="empty-state">No sell signals yet.</div>
+            ) : (
+              sellSignals.map((s) => renderSignalCard(s, "SELL"))
+            )}
+          </div>
         </div>
+
       </div>
     </div>
   );

@@ -9,9 +9,9 @@ import java.util.List;
 /**
  * Unified market data abstraction for Alpaca, Polygon, or any other provider.
  *
- * This interface now supports:
- *  - Your original methods (unchanged)
- *  - New institutional breakout engine methods:
+ * This interface supports:
+ *  - Original methods (unchanged)
+ *  - Institutional breakout engine methods:
  *        getLatestMinuteBar()
  *        getVWAP()
  *        getAverage1MinVolume()
@@ -22,22 +22,49 @@ public interface MarketDataClient {
     // ORIGINAL METHODS (UNCHANGED)
     // -----------------------------
 
-    double getLastPrice(String symbol);
+    /**
+     * Returns the last traded price for the symbol.
+     */
+    Double getLastPrice(String symbol);
 
+    /**
+     * Returns the previous day's closing price.
+     */
     Double getPreviousClose(String symbol);
 
+    /**
+     * Returns premarket high, low, volume, and previous close.
+     */
     PremarketLevels getPremarketLevels(String symbol);
 
-    double getPremarketVolume(String symbol);
+    /**
+     * Returns total premarket volume.
+     */
+    Double getPremarketVolume(String symbol);
 
-    double getCurrentVolume(String symbol);
+    /**
+     * Returns current day's total volume.
+     */
+    Double getCurrentVolume(String symbol);
 
+    /**
+     * Returns average daily volume (ADV).
+     */
     Double getAverageVolume(String symbol);
 
+    /**
+     * Returns total options volume for the day.
+     */
     Double getOptionsVolume(String symbol);
 
+    /**
+     * Returns the company name.
+     */
     String getCompanyName(String symbol);
 
+    /**
+     * Returns historical minute bars for a time range.
+     */
     List<MinuteBar> getMinuteBars(String symbol, ZonedDateTime start, ZonedDateTime end);
 
 

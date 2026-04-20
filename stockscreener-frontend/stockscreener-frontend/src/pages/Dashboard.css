@@ -67,3 +67,185 @@
 .light-mode .empty-state {
   color: #64748b;
 }
+
+/* ------------------------------------------------------------
+   SIGNAL CARD BASE STYLES
+------------------------------------------------------------ */
+.signal-card {
+  background: #1e293b;
+  padding: 16px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.signal-buy {
+  border-left: 4px solid #00ff9d;
+}
+
+.signal-sell {
+  border-left: 4px solid #ff5c5c;
+}
+
+.signal-card-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.signal-symbol {
+  font-size: 1.4rem;
+  font-weight: bold;
+}
+
+.signal-direction-buy {
+  color: #00ff9d;
+  font-weight: bold;
+}
+
+.signal-direction-sell {
+  color: #ff5c5c;
+  font-weight: bold;
+}
+
+.signal-data-row {
+  display: flex;
+  gap: 6px;
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+
+.signal-divider {
+  opacity: 0.4;
+}
+
+/* ------------------------------------------------------------
+   BREAKOUT STRENGTH STYLES
+------------------------------------------------------------ */
+.signal-strength-row {
+  margin-top: 6px;
+  font-size: 14px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.strength-label {
+  opacity: 0.7;
+}
+
+.strength-value {
+  font-weight: bold;
+}
+
+.strength-strong {
+  color: #00ff9d;
+}
+
+.strength-medium {
+  color: #ffd447;
+}
+
+.strength-weak {
+  color: #ff5c5c;
+}
+
+/* ------------------------------------------------------------
+   ANIMATIONS
+------------------------------------------------------------ */
+.glow-green {
+  animation: glowGreen 1.2s ease-out;
+}
+
+.glow-red {
+  animation: glowRed 1.2s ease-out;
+}
+
+@keyframes glowGreen {
+  0% { box-shadow: 0 0 20px rgba(0,255,157,0.8); }
+  100% { box-shadow: none; }
+}
+
+@keyframes glowRed {
+  0% { box-shadow: 0 0 20px rgba(255,92,92,0.8); }
+  100% { box-shadow: none; }
+}
+
+.slide-in {
+  animation: slideIn 0.35s ease-out;
+}
+
+@keyframes slideIn {
+  from { transform: translateY(-10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* ------------------------------------------------------------
+   LAYOUT + HEADERS
+------------------------------------------------------------ */
+.dashboard-container {
+  padding: 30px;
+  min-height: 100vh;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.dashboard-inner {
+  max-width: 1200px; /* expanded for 2 columns */
+  margin: 0 auto;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.dashboard-header-title {
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+.dashboard-header-subtitle {
+  opacity: 0.7;
+}
+
+.section-title-buy {
+  color: #00ff9d;
+  margin-bottom: 10px;
+}
+
+.section-title-sell {
+  color: #ff5c5c;
+  margin-bottom: 10px;
+}
+
+.empty-state {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+/* ------------------------------------------------------------
+   ⭐ NEW — SIDE-BY-SIDE BUY/SELL LAYOUT
+------------------------------------------------------------ */
+.signal-columns {
+  display: flex;
+  gap: 25px;
+  margin-top: 20px;
+}
+
+.signal-column {
+  flex: 1; /* 50/50 split */
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------
+   RESPONSIVE (Mobile stacks columns)
+------------------------------------------------------------ */
+@media (max-width: 900px) {
+  .signal-columns {
+    flex-direction: column;
+  }
+}

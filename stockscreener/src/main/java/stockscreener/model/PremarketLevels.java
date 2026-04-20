@@ -14,49 +14,81 @@ public class PremarketLevels {
     private double low;
     private double open;
 
-    private double premarketVolume;   // NEW
-    private Double previousClose;     // NEW
+    private long premarketVolume;     // FIXED: long (matches Alpaca)
+    private Double previousClose;     // FIXED: nullable wrapper
 
     public PremarketLevels() {
     }
 
-    public double getHigh() {
-        return high;
+    /**
+     * Full institutional constructor.
+     * Matches AlpacaMarketDataClient usage:
+     *
+     * new PremarketLevels(high, low, volume, previousClose)
+     */
+    public PremarketLevels(double high, double low, long premarketVolume, Double previousClose) {
+        this.high = high;
+        this.low = low;
+        this.premarketVolume = premarketVolume;
+        this.previousClose = previousClose;
     }
 
-    public void setHigh(double high) {
-        this.high = high;
+    // -------------------
+    // Getters
+    // -------------------
+
+    public double getHigh() {
+        return high;
     }
 
     public double getLow() {
         return low;
     }
 
-    public void setLow(double low) {
-        this.low = low;
-    }
-
     public double getOpen() {
         return open;
     }
 
-    public void setOpen(double open) {
-        this.open = open;
-    }
-
-    public double getPremarketVolume() {
+    public long getPremarketVolume() {
         return premarketVolume;
-    }
-
-    public void setPremarketVolume(double premarketVolume) {
-        this.premarketVolume = premarketVolume;
     }
 
     public Double getPreviousClose() {
         return previousClose;
     }
 
+    // -------------------
+    // Setters
+    // -------------------
+
+    public void setHigh(double high) {
+        this.high = high;
+    }
+
+    public void setLow(double low) {
+        this.low = low;
+    }
+
+    public void setOpen(double open) {
+        this.open = open;
+    }
+
+    public void setPremarketVolume(long premarketVolume) {
+        this.premarketVolume = premarketVolume;
+    }
+
     public void setPreviousClose(Double previousClose) {
         this.previousClose = previousClose;
+    }
+
+    @Override
+    public String toString() {
+        return "PremarketLevels{" +
+                "high=" + high +
+                ", low=" + low +
+                ", open=" + open +
+                ", premarketVolume=" + premarketVolume +
+                ", previousClose=" + previousClose +
+                '}';
     }
 }

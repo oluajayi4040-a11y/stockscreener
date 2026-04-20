@@ -14,13 +14,13 @@ public class ScannerController {
     }
 
     /**
-     * Manual trigger for a scan.
-     * Replaces old runScan() with the new scan() method.
+     * Manual trigger for a full universe scan.
+     * Uses the new dynamic S&P 500 universe + institutional filters.
      */
     @GetMapping("/api/scanner/run")
     public String runScan() {
-        scannerService.scan();   // UPDATED — replaces runScan()
-        return "Scan triggered";
+        scannerService.scan();
+        return "Universe scan triggered";
     }
 
     /**

@@ -15,14 +15,15 @@ public class SignalBroadcaster {
     }
 
     /**
-     * Legacy broadcaster for old QualifiedSignal objects.
+     * Broadcast legacy QualifiedSignal objects.
+     * (Still supported for backward compatibility.)
      */
     public void broadcast(QualifiedSignal signal) {
         messagingTemplate.convertAndSend("/topic/signals", signal);
     }
 
     /**
-     * NEW — Broadcast institutional BreakoutSignal objects.
+     * Broadcast institutional BreakoutSignal objects.
      */
     public void broadcast(SignalEngine.BreakoutSignal signal) {
         messagingTemplate.convertAndSend("/topic/signals", signal);

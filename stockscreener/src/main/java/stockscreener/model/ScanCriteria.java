@@ -8,6 +8,14 @@ public class ScanCriteria {
     private Double minAvgVolume;
     private Double minOptionsVolume;
 
+    public ScanCriteria() {
+        // Default institutional filters
+        this.minPrice = 1.0;                 // $1 minimum
+        this.maxPrice = 2000.0;              // $2000 maximum
+        this.minAvgVolume = 2_000_000.0;     // > 2M avg volume
+        this.minOptionsVolume = 10_000.0;    // > 10k options volume
+    }
+
     public Double getMinPrice() {
         return minPrice;
     }
